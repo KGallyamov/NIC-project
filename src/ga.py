@@ -42,8 +42,10 @@ class GeneticAlgorithm:
             ind = np.random.randint(2, len(mutated_x) - 2)
             rm_layer = mutated_x[ind]
             del mutated_x[ind]
-            mutated_x[ind - 1], mutated_x[ind] = self._compress_layers(mutated_x[ind - 1],
+            compression_result = self._compress_layers(mutated_x[ind - 1],
                                                                        rm_layer, mutated_x[ind])
+            if compression_result:
+                mutated_x[ind - 1], mutated_x[ind] = compression_result
             return mutated_x
         # Change the number of neurons in a random layer, again, with probability p / 3
         elif action_prob < p:
@@ -100,8 +102,20 @@ class GeneticAlgorithm:
             new_right += '_' + right_kernel_size
         return new_left, new_right
 
-    def _expand_layers(self, l1: str, l2: str) -> Tuple[str, str, str]:
-        return None
+    def _expand_layers(self, left: str, right: str) -> Union[Tuple[str, str, str], bool]:
+        left_conf, right_conf = left.split('_'), right.split('_')
+        if not left_conf[0] == right_conf[0]:
+            return False
+        middle_neurons = (int(left_conf[2]) + int(right_conf[2])) // 2
+        middle_conf = [left_conf[0], int(left_conf[2]), middle_neurons]
+        right_conf[1] = str(middle_neurons)
+        if 'conv' in left:
+            left_kernel_size = int(left_conf[-1])
+            if left_kernel_size < 2:
+                return False
+            middle_conf.append(str(left_kernel_size - left_kernel_size // 2 + 1))
+            left_conf[-1] = str(left_kernel_size // 2)
+        return '_'.join(map(str, left_conf)), '_'.join(map(str, middle_conf)), '_'.join(map(str, right_conf))
 
     def _alter_layer(self, layer: str) -> str:
         return None
@@ -247,3 +261,9 @@ class GeneticAlgorithm:
 if __name__ == '__main__':
     print(GeneticAlgorithm._compress_layers(None, 'conv_3_32_3', 'conv_32_64_5', 'conv_64_128_3'))
     # >>> ('conv_3_48_7', 'conv_48_128_3')
+    print(GeneticAlgorithm._compress_layers(None, 'linear_1000_32', 'linear_32_64', 'linear_64_128'))
+    # >>> ('linear_1000_48', 'linear_48_128')
+    print(GeneticAlgorithm._expand_layers(None, 'conv_32_64_5', 'conv_64_128_3'))
+    # >>> ('conv_32_64_2', 'conv_64_96_4', 'conv_96_128_3')
+    print(GeneticAlgorithm._expand_layers(None, 'linear_32_64', 'linear_64_128'))
+    # >>> ('linear_32_64', 'linear_64_96', 'linear_96_128')
