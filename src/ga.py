@@ -1,6 +1,6 @@
 # Code for GA training is adapted from the labs
 import numpy as np
-from typing import List, Tuple
+from typing import List, Tuple, Union
 from random import randint
 
 import torch
@@ -9,6 +9,7 @@ import torch.nn as nn
 from tqdm import tqdm
 import torch.utils.data as data_utils
 from model import AutoEncoder, ACTIVATIONS
+from chromosome import Chromosome
 
 
 class GeneticAlgorithm:
@@ -83,10 +84,21 @@ class GeneticAlgorithm:
 
         return rule_2_x
 
-    def mutate(self, x: List[str]) -> List[str]:
-        pass
-    def _compress_layers(self, l1: str, l2: str, l3: str) -> Tuple[str, str]:
-        return None
+    def _compress_layers(self, left: str, to_rm: str, right: str) -> Union[Tuple[str, str], bool]:
+        left_conf, to_rm_conf, right_conf = left.split('_'), to_rm.split('_'), right.split('_')
+        if not left_conf[0] == to_rm_conf[0] == right_conf[0]:
+            return False
+        left_fan_out, right_fan_in = int(left_conf[2]), int(right_conf[1])
+        new_left = '_'.join(map(str, [*left_conf[:2], (left_fan_out + right_fan_in) // 2]))
+        new_right = '_'.join(map(str, [right.split('_')[0], (left_fan_out + right_fan_in) // 2, right_conf[2]]))
+
+        if 'conv' in left:
+            left_kernel_size = int(left_conf[-1])
+            to_rm_kernel_size = int(to_rm_conf[-1])
+            right_kernel_size = right_conf[-1]
+            new_left += '_' + str(left_kernel_size + to_rm_kernel_size - 1)
+            new_right += '_' + right_kernel_size
+        return new_left, new_right
 
     def _expand_layers(self, l1: str, l2: str) -> Tuple[str, str, str]:
         return None
@@ -230,3 +242,8 @@ class GeneticAlgorithm:
         model.load_state_dict(torch.load('./models/best_model.pth'))
         model.eval()
         return model, train_losses, val_losses
+
+
+if __name__ == '__main__':
+    print(GeneticAlgorithm._compress_layers(None, 'conv_3_32_3', 'conv_32_64_5', 'conv_64_128_3'))
+    # >>> ('conv_3_48_7', 'conv_48_128_3')
