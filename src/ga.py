@@ -35,7 +35,7 @@ class GeneticAlgorithm:
         if 0 <= action_prob <= p / 3 and len(mutated_x) > 2:
             ind = np.random.randint(1, len(mutated_x) - 1)
             mutated_x[ind], new_layer, mutated_x[ind + 1] = self._expand_layers(mutated_x[ind], mutated_x[ind + 1])
-            mutated_x.insert(ind, new_layer)
+            mutated_x.insert(ind + 1, new_layer)
             return mutated_x
         # Delete a random layer with probability p / 3
         elif p / 3 < action_prob < 2 * p / 3 and len(mutated_x) > 3:
@@ -44,13 +44,17 @@ class GeneticAlgorithm:
             del mutated_x[ind]
             compression_result = self._compress_layers(mutated_x[ind - 1],
                                                                        rm_layer, mutated_x[ind])
-            if compression_result:
-                mutated_x[ind - 1], mutated_x[ind] = compression_result
+            if compression_result is not None:
+                mutated_x[ind-1], mutated_x[ind] = compression_result
+            else:
+                mutated_x.insert(ind, rm_layer)
             return mutated_x
         # Change the number of neurons in a random layer, again, with probability p / 3
-        elif action_prob < p:
-            ind = np.random.randint(1, len(mutated_x))
-            mutated_x[ind] = self._alter_layer(mutated_x[ind])
+        elif action_prob <= p and len(mutated_x) > 3:
+            ind = np.random.randint(2, len(mutated_x))
+            alteration_result = self._alter_layer(mutated_x[ind-1], mutated_x[ind])
+            if alteration_result is not None:
+                mutated_x[ind - 1], mutated_x[ind] = alteration_result
         return mutated_x
 
     def maintain_restrictions(self, x: List[str]) -> List[str]:
@@ -89,7 +93,7 @@ class GeneticAlgorithm:
     def _compress_layers(self, left: str, to_rm: str, right: str) -> Union[Tuple[str, str], bool]:
         left_conf, to_rm_conf, right_conf = left.split('_'), to_rm.split('_'), right.split('_')
         if not left_conf[0] == to_rm_conf[0] == right_conf[0]:
-            return False
+            return None
         left_fan_out, right_fan_in = int(left_conf[2]), int(right_conf[1])
         new_left = '_'.join(map(str, [*left_conf[:2], (left_fan_out + right_fan_in) // 2]))
         new_right = '_'.join(map(str, [right.split('_')[0], (left_fan_out + right_fan_in) // 2, right_conf[2]]))
@@ -117,8 +121,18 @@ class GeneticAlgorithm:
             left_conf[-1] = str(left_kernel_size // 2)
         return '_'.join(map(str, left_conf)), '_'.join(map(str, middle_conf)), '_'.join(map(str, right_conf))
 
-    def _alter_layer(self, layer: str) -> str:
-        return None
+    def _alter_layer(self, preceding: str, layer: str) -> Tuple[str, str]:
+        preceding_conf, layer_conf = preceding.split('_'), layer.split('_')
+        if not preceding_conf[0] == layer_conf[0]:
+            return None
+        # if layer_conf[0] == 'linear':
+        #     new_neurons_num = np.random.randint(int(preceding_conf[1]), int(layer_conf[2]))
+        # else:
+
+        new_neurons_num = np.random.randint(*sorted([int(preceding_conf[1]), int(layer_conf[2])]))
+        preceding_conf[2] = str(new_neurons_num)
+        layer_conf[1] = str(new_neurons_num)
+        return '_'.join(preceding_conf), '_'.join(layer_conf)
 
     def crossover(self, x1: List[str], x2: List[str]) -> Tuple[List[str], List[str]]:
         p1 = randint(1, len(x1) - 1)
@@ -258,12 +272,25 @@ class GeneticAlgorithm:
         return model, train_losses, val_losses
 
 
-if __name__ == '__main__':
-    print(GeneticAlgorithm._compress_layers(None, 'conv_3_32_3', 'conv_32_64_5', 'conv_64_128_3'))
-    # >>> ('conv_3_48_7', 'conv_48_128_3')
-    print(GeneticAlgorithm._compress_layers(None, 'linear_1000_32', 'linear_32_64', 'linear_64_128'))
-    # >>> ('linear_1000_48', 'linear_48_128')
-    print(GeneticAlgorithm._expand_layers(None, 'conv_32_64_5', 'conv_64_128_3'))
-    # >>> ('conv_32_64_2', 'conv_64_96_4', 'conv_96_128_3')
-    print(GeneticAlgorithm._expand_layers(None, 'linear_32_64', 'linear_64_128'))
-    # >>> ('linear_32_64', 'linear_64_96', 'linear_96_128')
+# if __name__ == '__main__':
+#     # print(GeneticAlgorithm._compress_layers(None, 'conv_3_32_3', 'conv_32_64_5', 'conv_64_128_3'))
+#     # # >>> ('conv_3_48_7', 'conv_48_128_3')
+#     # print(GeneticAlgorithm._compress_layers(None, 'linear_1000_32', 'linear_32_64', 'linear_64_128'))
+#     # # >>> ('linear_1000_48', 'linear_48_128')
+#     # print(GeneticAlgorithm._expand_layers(None, 'conv_32_64_5', 'conv_64_128_3'))
+#     # # >>> ('conv_32_64_2', 'conv_64_96_4', 'conv_96_128_3')
+#     # print(GeneticAlgorithm._expand_layers(None, 'linear_32_64', 'linear_64_128'))
+#     # # >>> ('linear_32_64', 'linear_64_96', 'linear_96_128')
+#     # print(GeneticAlgorithm._alter_layer(None, 'linear_32_64', 'linear_64_128'))
+#     # # (non-deterministic) >>> ('linear_32_108', 'linear_108_128')
+#     # print(GeneticAlgorithm._alter_layer(None, 'conv_32_64_5', 'conv_64_128_3'))
+#     # # (non-deterministic) >>> ('conv_32_41_5', 'conv_41_128_3')
+#     sample_arch = ['ReLU', 'conv_3_32_5', 'conv_32_64_5',
+#                    'conv_64_128_3', 'linear_4096_1024',
+#                    'linear_1024_512', 'linear_512_128']
+#     ga = GeneticAlgorithm([(0, 0)], [(0, 0)], 1)
+#     print(ga.mutate(sample_arch, p=1.0))
+#     #  (non-deterministic) >>> ['Sigmoid', 'conv_3_32_5', 'conv_32_70_5', 'conv_70_128_3',
+#     #                           'linear_4096_1024', 'linear_1024_512', 'linear_512_128']
+#     #  (non-deterministic) >>> ['Tanh', 'conv_3_48_9', 'conv_48_128_3', 'linear_4096_1024',
+#     #                           'linear_1024_512', 'linear_512_128']
