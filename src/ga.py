@@ -1,5 +1,6 @@
 import numpy as np
 from typing import List, Tuple
+from random import randint
 
 import torch
 import torch.nn as nn
@@ -16,11 +17,50 @@ class GeneticAlgorithm:
         self.val_loader = data_utils.DataLoader(val_data, batch_size=batch_size, shuffle=False)
         self._device = torch.device('cuda') if torch.cuda.is_available() else torch.device('cpu')
 
+    def maintain_restrictions(self, x: List[str]) -> List[str]:
+        '''
+        The list of restrictions:
+        1. Convolutions strictly before fully connected layers
+        2. Gradually decreasing number of features
+
+        :param x:
+        :return: individual with applied restrictions
+        '''
+
+        # fix restriction 1 via removing any [f,c,f] and [c,f,c] sequences
+        rule_1_x = [x[0]]
+        for i in range(1, len(x)):
+            if rule_1_x[-1].split('_')[0] == 'linear' and x[i].split('_')[0] == 'conv':
+                continue
+            rule_1_x.append(x[i])
+
+        # fix restriction 2 via removing increasing sequences
+        rule_2_x = [rule_1_x[0]]
+        min_features = int(rule_1_x[1].split('_')[1])
+        for i in range(2, len(rule_1_x)):
+            current_features = int(rule_1_x[i].split('_')[1])
+            if rule_1_x[i - 1].split('_')[0] == 'conv' and rule_1_x[i].split('_')[0] == 'linear':
+                min_features = current_features
+                rule_2_x.append(rule_1_x[i])
+                continue
+
+            if min_features >= current_features:
+                min_features = current_features
+                rule_2_x.append(rule_1_x[i])
+
+        return rule_2_x
+
     def mutate(self, x: List[str]) -> List[str]:
         pass
 
-    def crossover(self, x1, x2) -> Tuple[List[str], List[str]]:
-        pass
+    def crossover(self, x1: List[str], x2: List[str]) -> Tuple[List[str], List[str]]:
+        p1 = randint(1, len(x1) - 1)
+        p2 = randint(1, len(x2) - 1)
+
+        child1 = self.maintain_restrictions(x1[:p1] + x2[p2:])
+        child2 = self.maintain_restrictions(x2[:p2] + x1[p1:])
+
+        return child1, child2
 
     def train_ga(self, steps=100, population_size=20, epochs_per_sample=50):
         pass
