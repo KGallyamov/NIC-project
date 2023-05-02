@@ -34,11 +34,27 @@ class TestStringMethods(unittest.TestCase):
     def test_shape(self):
         dataset = 'cifar-10-cats'
         dataset_path = '../data'
-        shape_size = (32, 32)
 
+        shape_size = (32, 32)
+        loader = CatDatasetLoader(dataset, shape_size, data_path=dataset_path)
+        self.assertTrue(loader[0].size() == [3, *shape_size], 'Reshape now working properly')
+
+        shape_size = (10, 10)
+        loader = CatDatasetLoader(dataset, shape_size, data_path=dataset_path)
+        self.assertTrue(loader[0].size() == [3, *shape_size], 'Reshape now working properly')
+
+    def test_do_augmentation(self):
+        dataset = 'cifar-10-cats'
+        dataset_path = '../data'
+
+        shape_size = (32, 32)
         loader = CatDatasetLoader(dataset, shape_size, data_path=dataset_path)
 
-        self.assertTrue(loader[0].size() == [3, *shape_size], 'Reshape now working properly')
+        before = loader.do_augmentation
+        loader.change_do_augmentation()
+        after = loader.do_augmentation
+
+        self.assertTrue(before == after, 'Augmentation did not change')
 
 
 if __name__ == '__main__':
