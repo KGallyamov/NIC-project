@@ -1,6 +1,6 @@
 # Default libraries
 from typing import List, Tuple
-import itertools  # used for optimization
+from collections.abc import Iterable
 
 # Requires installation (check requirements.txt)
 import torch.nn as nn
@@ -60,6 +60,14 @@ def _resolve_layer(layer_cfg: str, activation: str) -> Tuple[List[nn.Module], Li
     return enc_layer, dec_layer
 
 
+def iterate(iterable):
+    for elem in iterable:
+        if isinstance(elem, Iterable):
+            yield from iterate(elem)
+        else:
+            yield elem
+
+
 class AutoEncoder(nn.Module):
     def __init__(self, cfg: List[str]):
         """
@@ -90,9 +98,8 @@ class AutoEncoder(nn.Module):
 
         decoder_list.reverse()  # should be in increasing order, not decreasing
 
-        # define encoder/decoder
-        self.encoder = nn.Sequential(*list(itertools.chain.from_iterable(encoder_list)))
-        self.decoder = nn.Sequential(*list(itertools.chain.from_iterable(decoder_list)))
+        self.encoder = nn.Sequential(*list(iterate(encoder_list)))
+        self.decoder = nn.Sequential(*list(iterate(decoder_list)))
 
     def forward(self, x):
         t = self.encoder(x)
@@ -104,8 +111,8 @@ class AutoEncoder(nn.Module):
 #     ae = AutoEncoder(cfg_sample)
 #     rnd = np.random.random((16, 3, 64, 64))
 #     print(rnd.shape)
-#     # print(ae.encoder)
-#     # print(ae.decoder)
+#     print(ae.encoder)
+#     print(ae.decoder)[1], 2], 3], 4, [[[5]]]]
 #     print(ae(torch.from_numpy(rnd).float()).shape)
 #     cfg_sample = ['ReLU', 'linear_128_64', 'linear_64_32']
 #     ae = AutoEncoder(cfg_sample)
