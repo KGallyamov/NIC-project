@@ -1,7 +1,7 @@
 # Code for GA training is adapted from the labs
 import numpy as np
 from typing import List, Tuple, Union
-from random import randint
+from random import randint, choice, choices, random
 
 import torch
 import torch.nn as nn
@@ -9,7 +9,7 @@ import torch.nn as nn
 from tqdm import tqdm
 import torch.utils.data as data_utils
 from torch import optim
-from model import AutoEncoder, ACTIVATIONS
+from model import AutoEncoder, ACTIVATIONS, KERNEL_SIZE, KERNEL_SIZE_WEIGHTS, CONV_FEATURES, LINEAR_FEATURES
 from chromosome import Chromosome
 
 # libraries for optimization
@@ -23,6 +23,7 @@ class GeneticAlgorithm:
         self.val_loader = data_utils.DataLoader(val_data, batch_size=batch_size, shuffle=False)
         self._device = torch.device('cuda') if torch.cuda.is_available() else torch.device('cpu')
         self.fitness = dict()
+        self.data_size = train_data[0].shape
 
     def mutate(self, x: List[str], p: float) -> List[str]:
         """
@@ -169,7 +170,28 @@ class GeneticAlgorithm:
         :param k: Size of the population
         :return: "k" chromosomes
         """
-        return None
+        flatten_size = 1
+        for shape in self.data_size:
+            flatten_size *= shape
+
+        population = []
+        for _ in range(k):
+            individual = [choice(ACTIVATIONS)]
+            if random() < 0.5:  # fully linear individual
+                n_layers = randint(2, 10)
+                features = [flatten_size] + sorted(choices(LINEAR_FEATURES, k=n_layers), reverse=True)
+                for i in range(n_layers):
+                    individual.append(f"linear_{features[i]}_{features[i + 1]}")
+
+            else:  # fully conv individual
+                n_layers = randint(2, 5)
+                features = [3] + sorted(choices(CONV_FEATURES, k=n_layers), reverse=True)
+                kernel_sizes = sorted(choices(KERNEL_SIZE, weights=KERNEL_SIZE_WEIGHTS, k=n_layers), reverse=True)
+                for i in range(n_layers):
+                    individual.append(f"conv_{features[i]}_{features[i + 1]}_{kernel_sizes[i]}")
+            population.append(individual)
+
+        return population
 
     def train_ga(self,
                  k: int = 30,
@@ -245,7 +267,8 @@ class GeneticAlgorithm:
 
         # Get the best solution
         top_chromosome = self.get_elite(gen, 1)[0] if not save_best else best_chromosome
-        top_model, top_model_train_losses, top_model_val_losses = self._fit_autoencoder(top_chromosome, epochs_per_sample)
+        top_model, top_model_train_losses, top_model_val_losses = self._fit_autoencoder(top_chromosome,
+                                                                                        epochs_per_sample)
         return self.fitness[top_chromosome], top_model, top_model_train_losses, top_model_val_losses
 
     def _fit_autoencoder(self, cfg: List[str], epochs):
@@ -292,7 +315,7 @@ class GeneticAlgorithm:
         model.eval()
         return model, min(val_losses)
 
-# if __name__ == '__main__':
+if __name__ == '__main__':
 #     # print(GeneticAlgorithm._compress_layers(None, 'conv_3_32_3', 'conv_32_64_5', 'conv_64_128_3'))
 #     # # >>> ('conv_3_48_7', 'conv_48_128_3')
 #     # print(GeneticAlgorithm._compress_layers(None, 'linear_1000_32', 'linear_32_64', 'linear_64_128'))
@@ -314,3 +337,5 @@ class GeneticAlgorithm:
 #     #                           'linear_4096_1024', 'linear_1024_512', 'linear_512_128']
 #     #  (non-deterministic) >>> ['Tanh', 'conv_3_48_9', 'conv_48_128_3', 'linear_4096_1024',
 #     #                           'linear_1024_512', 'linear_512_128']
+    ga = GeneticAlgorithm([np.zeros((3, 32, 32))], [np.zeros((3, 32, 32))], 32)
+    print(*ga._generate_population(10), sep='\n')
