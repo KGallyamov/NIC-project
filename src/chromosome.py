@@ -7,7 +7,7 @@ class Chromosome:
         self.activation = cfg[0]
         self.layers_cfg = [[layer.split('_')[0], *map(int, layer.split('_')[1:])] for layer in cfg[1:]]
 
-    def alter_layer(self, ind):
+    def alter_layer(self, ind: int):
 
         return self
 
@@ -18,6 +18,8 @@ class Chromosome:
     def expand_layers(self, left, right):
 
         return self
-# if __name__ == '__main__':
-#     c = Chromosome(['ReLU', 'conv_128_64', 'conv_64_32'])
-#     print(c.layers_cfg)
+
+
+if __name__ == '__main__':
+    c = Chromosome(['ReLU', 'conv_128_64', 'conv_64_32'])
+    print(c.layers_cfg)

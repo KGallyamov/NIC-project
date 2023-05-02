@@ -2,6 +2,9 @@ import torch.nn as nn
 
 from typing import List, Tuple
 
+# optimization libraries
+import itertools
+
 ACTIVATIONS = ['ReLU', 'Tanh', 'Sigmoid', 'LReLU']
 
 
@@ -20,7 +23,7 @@ def _resolve_act(activation: str) -> nn.Module:
     elif activation.lower() == 'sigmoid':
         act = nn.Sigmoid()
     else:  # activation.lower() == 'lrelu':
-        act = nn.LeakyReLU
+        act = nn.LeakyReLU()
     return act
 
 
@@ -71,6 +74,7 @@ class AutoEncoder(nn.Module):
             enc_layer = []
             dec_layer = []
             enc_, dec_ = _resolve_layer(layer_cfg, activation)
+
             # Add symmetric layers to encoder and decoder
             enc_layer.append(enc_)
             dec_layer.append(dec_)
@@ -79,11 +83,15 @@ class AutoEncoder(nn.Module):
                 # enc_layer.insert(0, [nn.Flatten()])
                 # dec_layer.append([nn.Unflatten(1, (int(cfg[i - 1].split('_')[2]), ??, ??))])
 
-            encoder_list = encoder_list + enc_layer
-            decoder_list = dec_layer + decoder_list
+            # save layers
+            encoder_list.append(enc_layer)
+            decoder_list.append(dec_layer)  # will be reversed further (just improve performance)
 
-        self.encoder = nn.Sequential(*[l for block in encoder_list for l in block])
-        self.decoder = nn.Sequential(*[l for block in decoder_list for l in block])
+        decoder_list.reverse()  # should be in increasing order, not decreasing
+
+        # define encoder/decoder
+        self.encoder = nn.Sequential(*list(itertools.chain.from_iterable(encoder_list)))
+        self.decoder = nn.Sequential(*list(itertools.chain.from_iterable(decoder_list)))
 
     def forward(self, x):
         t = self.encoder(x)

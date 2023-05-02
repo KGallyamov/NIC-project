@@ -11,6 +11,9 @@ import torch.utils.data as data_utils
 from model import AutoEncoder, ACTIVATIONS
 from chromosome import Chromosome
 
+# libraries for optimization
+from heapq import nlargest
+
 
 class GeneticAlgorithm:
 
@@ -42,17 +45,16 @@ class GeneticAlgorithm:
             ind = np.random.randint(2, len(mutated_x) - 2)
             rm_layer = mutated_x[ind]
             del mutated_x[ind]
-            compression_result = self._compress_layers(mutated_x[ind - 1],
-                                                                       rm_layer, mutated_x[ind])
+            compression_result = self._compress_layers(mutated_x[ind - 1], rm_layer, mutated_x[ind])
             if compression_result is not None:
-                mutated_x[ind-1], mutated_x[ind] = compression_result
+                mutated_x[ind - 1], mutated_x[ind] = compression_result
             else:
                 mutated_x.insert(ind, rm_layer)
             return mutated_x
         # Change the number of neurons in a random layer, again, with probability p / 3
         elif action_prob <= p and len(mutated_x) > 3:
             ind = np.random.randint(2, len(mutated_x))
-            alteration_result = self._alter_layer(mutated_x[ind-1], mutated_x[ind])
+            alteration_result = self._alter_layer(mutated_x[ind - 1], mutated_x[ind])
             if alteration_result is not None:
                 mutated_x[ind - 1], mutated_x[ind] = alteration_result
         return mutated_x
@@ -152,15 +154,14 @@ class GeneticAlgorithm:
         """
         return 0
 
-    def get_elite(self, generation: List[List[str]], k) -> List[List[str]]:
+    def get_elite(self, generation: List[List[str]], k: int) -> List[List[str]]:
         """
         Return "k" most fit samples from the population
         :param generation: List of Chromosomes
         :param k: # of top samples
         :return: List of Chromosomes of length "k"
         """
-        generation = sorted(generation, key=lambda x: self.fitness[x])
-        return generation[-k:]
+        return nlargest(k, generation, key=lambda x: self.fitness[x])  # performs better than sorting
 
     def _generate_population(self, k) -> List[List[str]]:
         """
@@ -169,9 +170,18 @@ class GeneticAlgorithm:
         """
         return None
 
-    def train_ga(self, k=30, n_trial=100, keep_parents=False, patience=3, mutation_p=0.2, epochs_per_sample=50):
+    def train_ga(self,
+                 k: int = 30,
+                 n_trial: int = 100,
+                 keep_parents: bool = False,
+                 patience: int = 3,
+                 mutation_p: float = 0.2,
+                 epochs_per_sample: int = 50,
+                 save_best: bool = False
+                 ):
         """
-        Genetic Algorithm implementation
+        Genetic Algorithm implementation (maximization)
+        :param save_best: Whether save & return best globally or best of last iteration
         :param k: Population size
         :param n_trial: Number of iterations
         :param keep_parents: Elitism
@@ -187,11 +197,20 @@ class GeneticAlgorithm:
         # Calculate the initial fitness
         prev_fitness = self.fitness[gen[0]]
 
+        # Best chromosome
+        best_chromosome = None
+        best_fitness = -1e9
+
         # Flag to stop if there is no improvements for some generations
         early_stop_flag = patience
         for _ in tqdm(range(n_trial)):
             gen = self.get_elite(gen, k)
-            gen_fitness = self.fitness[gen[-1]]
+            gen_fitness = self.fitness[gen[0]]
+
+            if best_fitness < gen_fitness:
+                best_fitness = gen_fitness
+                best_chromosome = gen[0]
+
             # print('\nImprovement', gen_fitness - prev_fitness, 'New score:', gen_fitness)
 
             early_stop_flag = early_stop_flag - 1 if prev_fitness - gen_fitness >= 0 else patience
@@ -214,19 +233,18 @@ class GeneticAlgorithm:
                     next_gen.append(c2)
 
                 c = self.mutate(gen[i], mutation_p)
+
                 next_gen.append(c)
             gen = next_gen
             # Train autoencoders encoded in current population and save their fitness
             for chromosome in gen:
                 model, tr_history, vl_history = self._fit_autoencoder(chromosome, epochs_per_sample)
-                if chromosome not in self.fitness.keys():
-                    self.fitness[chromosome] = self.compute_fitness(model)
-                else:
-                    self.fitness[chromosome] = min(self.compute_fitness(model), self.fitness[chromosome])
+                prev_fit = self.fitness.get(chromosome, 1e9)
+                self.fitness[chromosome] = min(self.compute_fitness(model), prev_fit)
+
         # Get the best solution
-        top_chromosome = self.get_elite(gen, 1)[0]
-        top_model, top_model_train_losses, top_model_val_losses = self._fit_autoencoder(top_chromosome,
-                                                                                        epochs_per_sample)
+        top_chromosome = self.get_elite(gen, 1)[0] if not save_best else best_chromosome
+        top_model, top_model_train_losses, top_model_val_losses = self._fit_autoencoder(top_chromosome, epochs_per_sample)
         return self.fitness[top_chromosome], top_model, top_model_train_losses, top_model_val_losses
 
     def _fit_autoencoder(self, cfg: List[str], epochs):
@@ -270,7 +288,6 @@ class GeneticAlgorithm:
         model.load_state_dict(torch.load('./models/best_model.pth'))
         model.eval()
         return model, train_losses, val_losses
-
 
 # if __name__ == '__main__':
 #     # print(GeneticAlgorithm._compress_layers(None, 'conv_3_32_3', 'conv_32_64_5', 'conv_64_128_3'))
