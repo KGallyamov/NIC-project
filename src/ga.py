@@ -8,6 +8,7 @@ import torch.nn as nn
 
 from tqdm import tqdm
 import torch.utils.data as data_utils
+from torch import optim
 from model import AutoEncoder, ACTIVATIONS
 from chromosome import Chromosome
 
@@ -253,6 +254,7 @@ class GeneticAlgorithm:
         model = model.to(self._device)
 
         optimizer = torch.optim.Adam(model.parameters(), lr=3e-4)
+        scheduler = optim.lr_scheduler.CosineAnnealingLR(optimizer, epochs, 0, verbose=True)
 
         train_losses = []
         val_losses = []
@@ -270,6 +272,7 @@ class GeneticAlgorithm:
                 optimizer.step()
                 train_losses_per_epoch.append(loss.item())
 
+            scheduler.step()
             train_losses.append(np.mean(train_losses_per_epoch))
 
             model.eval()
@@ -287,7 +290,7 @@ class GeneticAlgorithm:
 
         model.load_state_dict(torch.load('./models/best_model.pth'))
         model.eval()
-        return model, train_losses, val_losses
+        return model, min(val_losses)
 
 # if __name__ == '__main__':
 #     # print(GeneticAlgorithm._compress_layers(None, 'conv_3_32_3', 'conv_32_64_5', 'conv_64_128_3'))
