@@ -1,11 +1,12 @@
+# Default libraries
+from typing import List, Tuple
+import itertools  # used for optimization
+
+# Requires installation (check requirements.txt)
 import torch.nn as nn
 
-from typing import List, Tuple
-
-# optimization libraries
-import itertools
-
-ACTIVATIONS = ['ReLU', 'Tanh', 'Sigmoid', 'LReLU']
+# Our units
+from src.constants import ACTIVATIONS
 
 
 def _resolve_act(activation: str) -> nn.Module:

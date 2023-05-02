@@ -1,19 +1,19 @@
-# Code for GA training is adapted from the labs
-import numpy as np
+# Default libraries
 from typing import List, Tuple, Union
 from random import randint
+from heapq import nlargest  # used for optimization
 
+# Code for GA training is adapted from the labs
+from tqdm import tqdm
+import wandb
+import numpy as np
 import torch
 import torch.nn as nn
-
-from tqdm import tqdm
 import torch.utils.data as data_utils
-from model import AutoEncoder, ACTIVATIONS
-import wandb
-from chromosome import Chromosome
 
-# libraries for optimization
-from heapq import nlargest
+# Our units
+from src.constants import ACTIVATIONS
+from src.model import AutoEncoder
 
 
 class GeneticAlgorithm:
@@ -192,6 +192,9 @@ class GeneticAlgorithm:
         """
         return 0
 
+    def _get_nlargest(self, elements: List, k: int, key=lambda a: a):
+        return nlargest(k, elements, key=key)  # performs faster than sorting
+
     def get_elite(self, generation: List[List[str]], k: int) -> List[List[str]]:
         """
         Return "k" most fit samples from the population
@@ -199,7 +202,7 @@ class GeneticAlgorithm:
         :param k: # of top samples
         :return: List of Chromosomes of length "k"
         """
-        return nlargest(k, generation, key=lambda x: self.fitness[x])  # performs better than sorting
+        return self._get_nlargest(generation, k, key=lambda x: self.fitness[x])
 
     def _generate_population(self, k) -> List[List[str]]:
         """
