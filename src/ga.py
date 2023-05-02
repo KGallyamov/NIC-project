@@ -23,6 +23,7 @@ class GeneticAlgorithm:
         self.val_loader = data_utils.DataLoader(val_data, batch_size=batch_size, shuffle=False)
         self._device = torch.device('cuda') if torch.cuda.is_available() else torch.device('cpu')
         self.fitness = dict()
+        self.data_size = train_data[0].shape
 
     def mutate(self, x: List[str], p: float) -> List[str]:
         """
