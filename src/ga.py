@@ -8,8 +8,8 @@ import torch.nn as nn
 
 from tqdm import tqdm
 import torch.utils.data as data_utils
-from torch import optim
 from model import AutoEncoder, ACTIVATIONS
+import wandb
 from chromosome import Chromosome
 
 # libraries for optimization
@@ -27,6 +27,15 @@ class GeneticAlgorithm:
     def mutate(self, x: List[str], p: float) -> List[str]:
         """
         Given config of a single AE, mutate each layer with probability p
+        sample_arch = ['ReLU', 'conv_3_32_5', 'conv_32_64_5',
+                       'conv_64_128_3', 'linear_4096_1024',
+                       'linear_1024_512', 'linear_512_128']
+        ga = GeneticAlgorithm([(0, 0)], [(0, 0)], 1)
+        print(ga.mutate(sample_arch, p=1.0))
+        (non-deterministic)
+        >>> ['Sigmoid', 'conv_3_32_5', 'conv_32_70_5', 'conv_70_128_3', 'linear_4096_1024', 'linear_1024_512', 'linear_512_128']
+        (non-deterministic)
+        >>> ['Tanh', 'conv_3_48_9', 'conv_48_128_3', 'linear_4096_1024', 'linear_1024_512', 'linear_512_128']
         :param x: Original chromosome
         :param p: Mutation chance
         :return: Updated config
@@ -36,10 +45,12 @@ class GeneticAlgorithm:
             mutated_x[0] = np.random.choice([act for act in ACTIVATIONS if act != x[0]])
         action_prob = np.random.random()
         # Insert a new layer with probability p / 3
-        if 0 <= action_prob <= p / 3 and len(mutated_x) > 2:
+        if action_prob <= p / 3 and len(mutated_x) > 2:
             ind = np.random.randint(1, len(mutated_x) - 1)
-            mutated_x[ind], new_layer, mutated_x[ind + 1] = self._expand_layers(mutated_x[ind], mutated_x[ind + 1])
-            mutated_x.insert(ind + 1, new_layer)
+            expansion_result = self._expand_layers(mutated_x[ind], mutated_x[ind + 1])
+            if expansion_result is not None:
+                mutated_x[ind], new_layer, mutated_x[ind + 1] = expansion_result
+                mutated_x.insert(ind + 1, new_layer)
             return mutated_x
         # Delete a random layer with probability p / 3
         elif p / 3 < action_prob < 2 * p / 3 and len(mutated_x) > 3:
@@ -93,7 +104,17 @@ class GeneticAlgorithm:
 
         return rule_2_x
 
-    def _compress_layers(self, left: str, to_rm: str, right: str) -> Union[Tuple[str, str], bool]:
+    def _compress_layers(self, left: str, to_rm: str, right: str) -> Union[Tuple[str, str], None]:
+        """
+        print(GeneticAlgorithm._compress_layers(None, 'conv_3_32_3', 'conv_32_64_5', 'conv_64_128_3'))
+        >>> ('conv_3_48_7', 'conv_48_128_3')
+        print(GeneticAlgorithm._compress_layers(None, 'linear_1000_32', 'linear_32_64', 'linear_64_128'))
+        >>> ('linear_1000_48', 'linear_48_128')
+        :param left: Layer before the layer to remove
+        :param to_rm: Layer after to compress
+        :param right: Layer after the one to be removed
+        :return: False if mutation failed else configs for updated left and right
+        """
         left_conf, to_rm_conf, right_conf = left.split('_'), to_rm.split('_'), right.split('_')
         if not left_conf[0] == to_rm_conf[0] == right_conf[0]:
             return None
@@ -109,29 +130,45 @@ class GeneticAlgorithm:
             new_right += '_' + right_kernel_size
         return new_left, new_right
 
-    def _expand_layers(self, left: str, right: str) -> Union[Tuple[str, str, str], bool]:
+    def _expand_layers(self, left: str, right: str) -> Union[Tuple[str, str, str], None]:
+        """
+        print(GeneticAlgorithm._expand_layers(None, 'conv_32_64_5', 'conv_64_128_3'))
+        >>> ('conv_32_64_2', 'conv_64_96_4', 'conv_96_128_3')
+        print(GeneticAlgorithm._expand_layers(None, 'linear_32_64', 'linear_64_128'))
+        >>> ('linear_32_64', 'linear_64_96', 'linear_96_128')
+        :param left: Layer after which we plan to insert a new layer
+        :param right: Layer before which we plan to insert a new layer
+        :return: None if mutation failed else config for three layers
+        """
         left_conf, right_conf = left.split('_'), right.split('_')
         if not left_conf[0] == right_conf[0]:
-            return False
+            return None
         middle_neurons = (int(left_conf[2]) + int(right_conf[2])) // 2
         middle_conf = [left_conf[0], int(left_conf[2]), middle_neurons]
         right_conf[1] = str(middle_neurons)
         if 'conv' in left:
             left_kernel_size = int(left_conf[-1])
             if left_kernel_size < 2:
-                return False
+                return None
             middle_conf.append(str(left_kernel_size - left_kernel_size // 2 + 1))
             left_conf[-1] = str(left_kernel_size // 2)
         return '_'.join(map(str, left_conf)), '_'.join(map(str, middle_conf)), '_'.join(map(str, right_conf))
 
-    def _alter_layer(self, preceding: str, layer: str) -> Tuple[str, str]:
+    def _alter_layer(self, preceding: str, layer: str) -> Union[Tuple[str, str], None]:
+        """
+        print(GeneticAlgorithm._alter_layer(None, 'linear_32_64', 'linear_64_128'))
+        (non-deterministic)
+        >>> ('linear_32_108', 'linear_108_128')
+        print(GeneticAlgorithm._alter_layer(None, 'conv_32_64_5', 'conv_64_128_3'))
+        (non-deterministic)
+        >>> ('conv_32_41_5', 'conv_41_128_3')
+        :param preceding:
+        :param layer:
+        :return:
+        """
         preceding_conf, layer_conf = preceding.split('_'), layer.split('_')
         if not preceding_conf[0] == layer_conf[0]:
             return None
-        # if layer_conf[0] == 'linear':
-        #     new_neurons_num = np.random.randint(int(preceding_conf[1]), int(layer_conf[2]))
-        # else:
-
         new_neurons_num = np.random.randint(*sorted([int(preceding_conf[1]), int(layer_conf[2])]))
         preceding_conf[2] = str(new_neurons_num)
         layer_conf[1] = str(new_neurons_num)
@@ -172,7 +209,7 @@ class GeneticAlgorithm:
         return None
 
     def train_ga(self,
-                 k: int = 30,
+                 k: int = 10,
                  n_trial: int = 100,
                  keep_parents: bool = False,
                  patience: int = 3,
@@ -204,7 +241,7 @@ class GeneticAlgorithm:
 
         # Flag to stop if there is no improvements for some generations
         early_stop_flag = patience
-        for _ in tqdm(range(n_trial)):
+        for i in tqdm(range(n_trial)):
             gen = self.get_elite(gen, k)
             gen_fitness = self.fitness[gen[0]]
 
@@ -212,7 +249,7 @@ class GeneticAlgorithm:
                 best_fitness = gen_fitness
                 best_chromosome = gen[0]
 
-            # print('\nImprovement', gen_fitness - prev_fitness, 'New score:', gen_fitness)
+            wandb.log({"val_loss": best_fitness, "step": i})
 
             early_stop_flag = early_stop_flag - 1 if prev_fitness - gen_fitness >= 0 else patience
             if early_stop_flag == 0:
@@ -239,14 +276,14 @@ class GeneticAlgorithm:
             gen = next_gen
             # Train autoencoders encoded in current population and save their fitness
             for chromosome in gen:
-                model, tr_history, vl_history = self._fit_autoencoder(chromosome, epochs_per_sample)
+                model, val_loss = self._fit_autoencoder(chromosome, epochs_per_sample)
                 prev_fit = self.fitness.get(chromosome, 1e9)
                 self.fitness[chromosome] = min(self.compute_fitness(model), prev_fit)
 
         # Get the best solution
         top_chromosome = self.get_elite(gen, 1)[0] if not save_best else best_chromosome
-        top_model, top_model_train_losses, top_model_val_losses = self._fit_autoencoder(top_chromosome, epochs_per_sample)
-        return self.fitness[top_chromosome], top_model, top_model_train_losses, top_model_val_losses
+        top_model, min_loss = self._fit_autoencoder(top_chromosome, epochs_per_sample)
+        return top_model, min_loss
 
     def _fit_autoencoder(self, cfg: List[str], epochs):
         model = AutoEncoder(cfg)
@@ -254,7 +291,6 @@ class GeneticAlgorithm:
         model = model.to(self._device)
 
         optimizer = torch.optim.Adam(model.parameters(), lr=3e-4)
-        scheduler = optim.lr_scheduler.CosineAnnealingLR(optimizer, epochs, 0, verbose=True)
 
         train_losses = []
         val_losses = []
@@ -272,7 +308,6 @@ class GeneticAlgorithm:
                 optimizer.step()
                 train_losses_per_epoch.append(loss.item())
 
-            scheduler.step()
             train_losses.append(np.mean(train_losses_per_epoch))
 
             model.eval()
@@ -292,25 +327,11 @@ class GeneticAlgorithm:
         model.eval()
         return model, min(val_losses)
 
-# if __name__ == '__main__':
-#     # print(GeneticAlgorithm._compress_layers(None, 'conv_3_32_3', 'conv_32_64_5', 'conv_64_128_3'))
-#     # # >>> ('conv_3_48_7', 'conv_48_128_3')
-#     # print(GeneticAlgorithm._compress_layers(None, 'linear_1000_32', 'linear_32_64', 'linear_64_128'))
-#     # # >>> ('linear_1000_48', 'linear_48_128')
-#     # print(GeneticAlgorithm._expand_layers(None, 'conv_32_64_5', 'conv_64_128_3'))
-#     # # >>> ('conv_32_64_2', 'conv_64_96_4', 'conv_96_128_3')
-#     # print(GeneticAlgorithm._expand_layers(None, 'linear_32_64', 'linear_64_128'))
-#     # # >>> ('linear_32_64', 'linear_64_96', 'linear_96_128')
-#     # print(GeneticAlgorithm._alter_layer(None, 'linear_32_64', 'linear_64_128'))
-#     # # (non-deterministic) >>> ('linear_32_108', 'linear_108_128')
-#     # print(GeneticAlgorithm._alter_layer(None, 'conv_32_64_5', 'conv_64_128_3'))
-#     # # (non-deterministic) >>> ('conv_32_41_5', 'conv_41_128_3')
-#     sample_arch = ['ReLU', 'conv_3_32_5', 'conv_32_64_5',
-#                    'conv_64_128_3', 'linear_4096_1024',
-#                    'linear_1024_512', 'linear_512_128']
-#     ga = GeneticAlgorithm([(0, 0)], [(0, 0)], 1)
-#     print(ga.mutate(sample_arch, p=1.0))
-#     #  (non-deterministic) >>> ['Sigmoid', 'conv_3_32_5', 'conv_32_70_5', 'conv_70_128_3',
-#     #                           'linear_4096_1024', 'linear_1024_512', 'linear_512_128']
-#     #  (non-deterministic) >>> ['Tanh', 'conv_3_48_9', 'conv_48_128_3', 'linear_4096_1024',
-#     #                           'linear_1024_512', 'linear_512_128']
+
+if __name__ == '__main__':
+    wandb.init(project='GA_training')
+    # sample_arch = ['ReLU', 'conv_3_32_5', 'conv_32_64_5',
+    #                'conv_64_128_3', 'linear_4096_1024',
+    #                'linear_1024_512', 'linear_512_128']
+    # ga = GeneticAlgorithm([(0, 0)], [(0, 0)], 1)
+    # print(ga.mutate(sample_arch, p=1.0))
