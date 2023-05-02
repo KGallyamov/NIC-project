@@ -1,6 +1,6 @@
 # Default libraries
 from typing import List, Tuple, Union
-from random import randint
+from random import randint, choice, choices, random
 from heapq import nlargest  # used for optimization
 
 # Code for GA training is adapted from the labs
@@ -12,7 +12,7 @@ import torch.nn as nn
 import torch.utils.data as data_utils
 
 # Our units
-from src.constants import ACTIVATIONS
+from src.constants import ACTIVATIONS, LINEAR_FEATURES, CONV_FEATURES, KERNEL_SIZE, KERNEL_SIZE_WEIGHTS
 from src.model import AutoEncoder
 
 
@@ -209,7 +209,28 @@ class GeneticAlgorithm:
         :param k: Size of the population
         :return: "k" chromosomes
         """
-        return None
+        flatten_size = 1
+        for shape in self.data_size:
+            flatten_size *= shape
+
+        population = []
+        for _ in range(k):
+            individual = [choice(ACTIVATIONS)]
+            if random() < 0.5:  # fully linear individual
+                n_layers = randint(2, 10)
+                features = [flatten_size] + sorted(choices(LINEAR_FEATURES, k=n_layers), reverse=True)
+                for i in range(n_layers):
+                    individual.append(f"linear_{features[i]}_{features[i + 1]}")
+
+            else:  # fully conv individual
+                n_layers = randint(2, 5)
+                features = [3] + sorted(choices(CONV_FEATURES, k=n_layers), reverse=True)
+                kernel_sizes = sorted(choices(KERNEL_SIZE, weights=KERNEL_SIZE_WEIGHTS, k=n_layers), reverse=True)
+                for i in range(n_layers):
+                    individual.append(f"conv_{features[i]}_{features[i + 1]}_{kernel_sizes[i]}")
+            population.append(individual)
+
+        return population
 
     def train_ga(self,
                  k: int = 10,
