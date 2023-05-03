@@ -12,7 +12,7 @@ import torch.nn as nn
 import torch.utils.data as data_utils
 
 # Our units
-from src.constants import ACTIVATIONS, LINEAR_FEATURES, CONV_FEATURES, KERNEL_SIZE, KERNEL_SIZE_WEIGHTS
+from src.constants import ACTIVATIONS, LINEAR_FEATURES, CONV_FEATURES, KERNEL_SIZE, KERNEL_SIZE_WEIGHTS, LATENT_SIZE
 from src.model import AutoEncoder
 
 
@@ -266,16 +266,17 @@ class GeneticAlgorithm:
         for _ in range(k):
             individual = [choice(ACTIVATIONS)]
 
-            n_layers = randint(0, 5)
+            n_layers = randint(0, 4)
             features = [3] + sorted(choices(CONV_FEATURES, k=n_layers), reverse=True)
             kernel_sizes = sorted(choices(KERNEL_SIZE, weights=KERNEL_SIZE_WEIGHTS, k=n_layers), reverse=True)
             for i in range(n_layers):
                 individual.append(f"conv_{features[i]}_{features[i + 1]}_{kernel_sizes[i]}")
 
-            n_layers = randint(int(n_layers == 0), 5)
+            n_layers = randint(int(n_layers == 0), 4)
             features = [flatten_size] + sorted(choices(LINEAR_FEATURES, k=n_layers), reverse=True)
             for i in range(n_layers):
                 individual.append(f"linear_{features[i]}_{features[i + 1]}")
+            individual.append(f"linear_{features[-1]}_{LATENT_SIZE}")
             population.append(individual)
 
         return population
@@ -408,3 +409,7 @@ class GeneticAlgorithm:
         model.load_state_dict(torch.load('./models/best_model.pth'))
         model.eval()
         return model, min(val_losses)
+
+if __name__ == '__main__':
+    ga = GeneticAlgorithm([np.zeros((3, 32, 32))], [np.zeros((3, 32, 32))], 1)
+    print(*ga._generate_population(100), sep='\n')
