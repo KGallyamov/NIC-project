@@ -36,11 +36,11 @@ class TestDataLoader(unittest.TestCase):
 
         shape_size = (32, 32)
         loader = CatDatasetLoader(dataset, shape_size, data_path=self.data_path)
-        self.assertTrue(loader[0].size() == [3, *shape_size], 'Reshape now working properly')
+        self.assertTrue(list(loader[0].size()) == [3, *shape_size], 'Reshape now working properly')
 
         shape_size = (10, 10)
         loader = CatDatasetLoader(dataset, shape_size, data_path=self.data_path)
-        self.assertTrue(loader[0].size() == [3, *shape_size], 'Reshape now working properly')
+        self.assertTrue(list(loader[0].size()) == [3, *shape_size], 'Reshape now working properly')
 
     def test_do_augmentation(self):
         dataset = 'cifar-10-cats'
