@@ -264,7 +264,7 @@ class GeneticAlgorithm:
             gen = self.get_elite(gen, k)
             gen_fitness = self.fitness.get(tuple(gen[0]), -1e9)
 
-            if best_fitness < gen_fitness:
+            if best_fitness <= gen_fitness:
                 best_fitness = gen_fitness
                 best_chromosome = gen[0]
 

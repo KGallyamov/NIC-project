@@ -92,8 +92,16 @@ class AutoEncoder(nn.Module):
                 kernel_size = int(cfg[i].split('_')[-1])
                 card_height, card_width = card_height - kernel_size + 1, card_width - kernel_size + 1
             if 'conv' in cfg[i - 1].lower() and 'linear' in cfg[i].lower():
-                enc_layer.insert(0, [nn.Flatten()])
+                neurons_num = int(cfg[i].split('_')[1])
+                encoder_fan_in = card_height * card_width * int(cfg[i - 1].split('_')[2])
+                enc_layer.insert(0, [nn.Flatten(),
+                                     nn.Linear(encoder_fan_in, neurons_num),
+                                     _resolve_act(activation),
+                                     ])
+                dec_.insert(-1, _resolve_act(activation))
+                dec_.insert(-1, nn.Linear(neurons_num, encoder_fan_in))
                 dec_.insert(-1, nn.Unflatten(1, (int(cfg[i - 1].split('_')[2]), card_height, card_width)))
+
             enc_layer.append(enc_)
             dec_layer.append(dec_)
 
