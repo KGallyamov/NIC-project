@@ -1,9 +1,9 @@
 # Default libraries
-from typing import List, Tuple
+from typing import List, Tuple, Any
 from collections.abc import Iterable
 
-import torch
 # Requires installation (check requirements.txt)
+import torch
 import torch.nn as nn
 
 # Our units
@@ -81,7 +81,11 @@ def _resolve_layer(layer_cfg: str, activation: str) -> Tuple[List[nn.Module], Li
 class AutoEncoder(nn.Module):
     def __init__(self, cfg: List[str], image_shape: tuple[int, int], n_channels=3):
         """
-        :param cfg: List of str in the format: layertype_fanin_fanout (_kernelsize for layertype=conv)
+        Initialize encoder & decoder layers from config
+
+        :param cfg:          list of str in the format: layertype_fanin_fanout (_kernelsize for layertype=conv)
+        :param image_shape:  shape of images that is going to be passed
+        :param n_channels:   number of channels on an input image
         """
         super().__init__()
         self.cfg = cfg
@@ -127,7 +131,13 @@ class AutoEncoder(nn.Module):
         self.encoder = nn.Sequential(*list(iterate(encoder_list)))
         self.decoder = nn.Sequential(*list(iterate(decoder_list)))
 
-    def forward(self, x: torch.Tensor):
+    def forward(self, x: torch.Tensor) -> tuple[torch.Tensor, Any]:
+        """
+        Forward image through encoder & decoder
+
+        :param x:  image to forward
+        :return:   result of encoder and decoder
+        """
         x_shape = x.shape
         if 'linear' in self.cfg[1]:
             x = torch.reshape(x, (x.shape[0], -1))
@@ -135,19 +145,3 @@ class AutoEncoder(nn.Module):
         _x = self.decoder(t)
 
         return torch.reshape(_x, x_shape), t
-
-# if __name__ == '__main__':
-#     cfg_sample = ['ReLU', 'conv_3_32_3', 'conv_32_64_3']
-#     ae = AutoEncoder(cfg_sample)
-#     rnd = np.random.random((16, 3, 64, 64))
-#     print(rnd.shape)
-#     # print(ae.encoder)
-#     # print(ae.decoder)
-#     print(ae(torch.from_numpy(rnd).float()).shape)
-#     cfg_sample = ['ReLU', 'linear_128_64', 'linear_64_32']
-#     ae = AutoEncoder(cfg_sample)
-#     rnd = np.random.random((16, 128))
-#     print(rnd.shape)
-#     # print(ae.encoder)
-#     # print(ae.decoder)
-#     print(ae(torch.from_numpy(rnd).float()).shape)
