@@ -102,7 +102,7 @@ class GeneticAlgorithm:
 
         # fix restriction 2 via removing increasing sequences
         rule_2_x = [rule_1_x[0], rule_1_x[1]]
-        min_features = int(rule_1_x[1].split('_')[1])
+        min_features = int(rule_1_x[1].split('_')[2])
         for i in range(2, len(rule_1_x)):
             current_features = int(rule_1_x[i].split('_')[1])
             if rule_1_x[i - 1].split('_')[0] == 'conv' and rule_1_x[i].split('_')[0] == 'linear':
@@ -120,7 +120,16 @@ class GeneticAlgorithm:
                 gen_next = rule_2_x[i].split('_')
                 rule_2_x[i - 1] = '_'.join([gen_prev[0], gen_prev[1], gen_next[1]] + gen_prev[3:])
 
-        return rule_2_x
+        rule_3_x = [rule_2_x[0]]
+        conv_limit = 4
+        for i in range(1, len(rule_2_x)):
+            if rule_2_x[i].split('_')[0] == 'linear':
+                rule_3_x.append(rule_2_x[i])
+            elif rule_2_x[i].split('_')[0] == 'conv' and conv_limit > 0:
+                rule_3_x.append(rule_2_x[i])
+                conv_limit -= 1
+
+        return rule_3_x
 
     @staticmethod
     def _compress_layers(left: str, to_rm: str, right: str) -> Union[Tuple[str, str], None]:
@@ -412,4 +421,4 @@ class GeneticAlgorithm:
 
 if __name__ == '__main__':
     ga = GeneticAlgorithm([np.zeros((3, 32, 32))], [np.zeros((3, 32, 32))], 1)
-    print(*ga._generate_population(100), sep='\n')
+    print(ga.maintain_restrictions(['LReLU', 'conv_3_64_7', 'conv_64_12_5', 'conv_12_12_3', 'conv_12_12_3', 'conv_12_12_3', 'conv_12_4_3', 'linear_128_64']))
