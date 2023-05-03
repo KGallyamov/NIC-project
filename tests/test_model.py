@@ -31,6 +31,7 @@ class TestIterate(unittest.TestCase):
 
 class TestAutoEncoder(unittest.TestCase):
     data_path = os.path.join(os.path.dirname(os.getcwd()), 'data')
+    image_shape = (32, 32)
 
     def test_methods_exist(self):
         methods = dir(AutoEncoder)
@@ -38,17 +39,17 @@ class TestAutoEncoder(unittest.TestCase):
 
     def test_autoencoder_work(self):
         example = ['ReLU', 'conv_3_32_3', 'conv_32_64_3']
-        autoencoder = AutoEncoder(example)
+        autoencoder = AutoEncoder(example, self.image_shape)
 
         self.assertTrue(type(autoencoder) == AutoEncoder, 'AutoEncoder class do now run')
         self.assertTrue(type(autoencoder.encoder) == nn.Sequential, 'Encoder is not defined')
         self.assertTrue(type(autoencoder.decoder) == nn.Sequential, 'Decoder is not defined')
 
     def test_forward(self):
-        dataset = CatDatasetLoader('cifar-10-cats', (32, 32), data_path=self.data_path)
+        dataset = CatDatasetLoader('cifar-10-cats', self.image_shape, data_path=self.data_path)
 
         example = ['ReLU', 'conv_3_32_3', 'conv_32_64_3', 'linear_128_64', 'linear_64_32']
-        autoencoder = AutoEncoder(example)
+        autoencoder = AutoEncoder(example, self.image_shape)
 
         n_trials = 100
         for _ in range(n_trials):

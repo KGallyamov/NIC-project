@@ -70,7 +70,7 @@ def _resolve_layer(layer_cfg: str, activation: str) -> Tuple[List[nn.Module], Li
 
 
 class AutoEncoder(nn.Module):
-    def __init__(self, cfg: List[str]):
+    def __init__(self, cfg: List[str], image_shape: tuple[int, int]):
         """
         :param cfg: List of str in the format: layertype_fanin_fanout (_kernelsize for layertype=conv)
         """
@@ -89,7 +89,7 @@ class AutoEncoder(nn.Module):
             # Add symmetric layers to encoder and decoder
             enc_layer.append(enc_)
             dec_layer.append(dec_)
-            if 'conv' in cfg[i - 1].lower() and 'linear' in cfg[i]:
+            if 'conv' in cfg[i - 1].lower() and 'linear' in cfg[i].lower():
                 assert NotImplementedError
                 # enc_layer.insert(0, [nn.Flatten()])
                 # dec_layer.append([nn.Unflatten(1, (int(cfg[i - 1].split('_')[2]), ??, ??))])

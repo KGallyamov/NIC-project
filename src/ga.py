@@ -17,7 +17,6 @@ from src.model import AutoEncoder
 
 
 class GeneticAlgorithm:
-
     def __init__(self, train_data, val_data, batch_size):
         self.train_loader = data_utils.DataLoader(train_data, batch_size=batch_size, shuffle=True)
         self.val_loader = data_utils.DataLoader(val_data, batch_size=batch_size, shuffle=False)
@@ -187,15 +186,6 @@ class GeneticAlgorithm:
 
         return child1, child2
 
-    def compute_fitness(self, *args, **kwargs) -> float:
-        """
-        This function should be called only once for each model to optimize performance
-        :param args:
-        :param kwargs:
-        :return:
-        """
-        return 0
-
     def _get_nlargest(self, elements: List, k: int, key=lambda a: a):
         return nlargest(k, elements, key=key)  # performs faster than sorting
 
@@ -277,7 +267,7 @@ class GeneticAlgorithm:
                 best_fitness = gen_fitness
                 best_chromosome = gen[0]
 
-            wandb.log({"val_loss": best_fitness, "step": i})
+            wandb.log({"val_loss": -best_fitness, "step": i})
 
             early_stop_flag = early_stop_flag - 1 if prev_fitness - gen_fitness >= 0 else patience
             if early_stop_flag == 0:
@@ -306,7 +296,7 @@ class GeneticAlgorithm:
             for chromosome in tqdm(gen, leave=False, desc='configs pbar'):
                 model, val_loss = self._fit_autoencoder(chromosome, epochs_per_sample)
                 prev_fit = self.fitness.get(tuple(chromosome), 1e9)
-                self.fitness[tuple(chromosome)] = min(self.compute_fitness(model), prev_fit)
+                self.fitness[tuple(chromosome)] = min(val_loss, prev_fit)
 
         # Get the best solution
         top_chromosome = self.get_elite(gen, 1)[0] if not save_best else best_chromosome
