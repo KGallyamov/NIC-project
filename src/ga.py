@@ -114,6 +114,12 @@ class GeneticAlgorithm:
                 min_features = current_features
                 rule_2_x.append(rule_1_x[i])
 
+        for i in range(2, len(rule_2_x)):
+            if rule_2_x[i - 1].split('_')[0] == rule_2_x[i].split('_')[0]:
+                gen_prev = rule_2_x[i - 1].split('_')
+                gen_next = rule_2_x[i].split('_')
+                rule_2_x[i - 1] = '_'.join([gen_prev[0], gen_prev[1], gen_next[1]] + gen_prev[3:])
+
         return rule_2_x
 
     @staticmethod
@@ -259,18 +265,17 @@ class GeneticAlgorithm:
         population = []
         for _ in range(k):
             individual = [choice(ACTIVATIONS)]
-            if random() < 0.5:  # fully linear individual
-                n_layers = randint(2, 10)
-                features = [flatten_size] + sorted(choices(LINEAR_FEATURES, k=n_layers), reverse=True)
-                for i in range(n_layers):
-                    individual.append(f"linear_{features[i]}_{features[i + 1]}")
 
-            else:  # fully conv individual
-                n_layers = randint(2, 5)
-                features = [3] + sorted(choices(CONV_FEATURES, k=n_layers), reverse=True)
-                kernel_sizes = sorted(choices(KERNEL_SIZE, weights=KERNEL_SIZE_WEIGHTS, k=n_layers), reverse=True)
-                for i in range(n_layers):
-                    individual.append(f"conv_{features[i]}_{features[i + 1]}_{kernel_sizes[i]}")
+            n_layers = randint(0, 5)
+            features = [3] + sorted(choices(CONV_FEATURES, k=n_layers), reverse=True)
+            kernel_sizes = sorted(choices(KERNEL_SIZE, weights=KERNEL_SIZE_WEIGHTS, k=n_layers), reverse=True)
+            for i in range(n_layers):
+                individual.append(f"conv_{features[i]}_{features[i + 1]}_{kernel_sizes[i]}")
+
+            n_layers = randint(int(n_layers == 0), 5)
+            features = [flatten_size] + sorted(choices(LINEAR_FEATURES, k=n_layers), reverse=True)
+            for i in range(n_layers):
+                individual.append(f"linear_{features[i]}_{features[i + 1]}")
             population.append(individual)
 
         return population
