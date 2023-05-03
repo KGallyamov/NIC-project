@@ -11,6 +11,13 @@ from src.constants import ACTIVATIONS
 
 
 def iterate(iterable):
+    """
+    Generator that iterate through any-d array
+
+    :param iterable:  any iterable object containing non-iterable objects as leafs (e.x. [[1], 2, [[3]]]
+    :return:          each non-iterable elements 1 by 1 (e.x. [1, 2, 3])
+    """
+
     for elem in iterable:
         if isinstance(elem, Iterable):
             yield from iterate(elem)
@@ -21,8 +28,9 @@ def iterate(iterable):
 def _resolve_act(activation: str) -> nn.Module:
     """
     Given activation name, resolve it into the corresponding object
-    :param activation: str, activation name
-    :return: Activation module
+
+    :param activation:  str, activation name
+    :return:            activation module
     """
     assert activation in ACTIVATIONS, f'Activation {activation} is not supported'
     act = None
@@ -40,9 +48,10 @@ def _resolve_act(activation: str) -> nn.Module:
 def _resolve_layer(layer_cfg: str, activation: str) -> Tuple[List[nn.Module], List[nn.Module]]:
     """
     Given layer config, return the corresponding AE blocks for encoder and decoder
-    :param layer_cfg: str in the format layer_fanin_fanout (_kernelsize)
-    :param activation: Activation name encoding
-    :return:
+
+    :param layer_cfg:   str in the format layer_fanin_fanout (_kernelsize)
+    :param activation:  activation name encoding
+    :return:            encoder & decoder
     """
     l_type = layer_cfg.split('_')[0]
     enc_layer, dec_layer = None, None
