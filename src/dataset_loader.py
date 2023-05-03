@@ -9,7 +9,7 @@ from torchvision import transforms
 
 
 class CatDatasetLoader(Dataset):
-    def __init__(self, dataset: str, rescale_size: tuple[int, int], data_path: str = '/data', do_augmentation: bool = True):
+    def __init__(self, dataset: str, rescale_size: tuple[int, int], data_path: str = 'data', do_augmentation: bool = True):
         super().__init__()
 
         # define path & basic parameters

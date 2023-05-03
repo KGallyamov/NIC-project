@@ -114,7 +114,7 @@ class GeneticAlgorithm:
         :param left: Layer before the layer to remove
         :param to_rm: Layer after to compress
         :param right: Layer after the one to be removed
-        :return: False if mutation failed else configs for updated left and right
+        :return: None if mutation has failed, update layers configs otherwise
         """
         left_conf, to_rm_conf, right_conf = left.split('_'), to_rm.split('_'), right.split('_')
         if not left_conf[0] == to_rm_conf[0] == right_conf[0]:
@@ -139,7 +139,7 @@ class GeneticAlgorithm:
         >>> ('linear_32_64', 'linear_64_96', 'linear_96_128')
         :param left: Layer after which we plan to insert a new layer
         :param right: Layer before which we plan to insert a new layer
-        :return: None if mutation failed else config for three layers
+        :return: None if mutation has failed, updated layers configs otherwise
         """
         left_conf, right_conf = left.split('_'), right.split('_')
         if not left_conf[0] == right_conf[0]:
@@ -163,9 +163,9 @@ class GeneticAlgorithm:
         print(GeneticAlgorithm._alter_layer(None, 'conv_32_64_5', 'conv_64_128_3'))
         (non-deterministic)
         >>> ('conv_32_41_5', 'conv_41_128_3')
-        :param preceding:
-        :param layer:
-        :return:
+        :param preceding: Layer before the one to be altered
+        :param layer: layer to be altered
+        :return: None if mutation has failed, updated layers configs otherwise
         """
         preceding_conf, layer_conf = preceding.split('_'), layer.split('_')
         if not preceding_conf[0] == layer_conf[0]:
@@ -179,10 +179,10 @@ class GeneticAlgorithm:
         p1 = randint(1, len(x1) - 1)
         p2 = randint(1, len(x2) - 1)
 
-        child1 = self.maintain_restrictions(x1[:p1] + x2[p2:])
-        child2 = self.maintain_restrictions(x2[:p2] + x1[p1:])
+        # child1 = self.maintain_restrictions(x1[:p1] + x2[p2:])
+        # child2 = self.maintain_restrictions(x2[:p2] + x1[p1:])
 
-        return child1, child2
+        return x1, x2
 
     def compute_fitness(self, *args, **kwargs) -> float:
         """
@@ -203,7 +203,7 @@ class GeneticAlgorithm:
         :param k: # of top samples
         :return: List of Chromosomes of length "k"
         """
-        return self._get_nlargest(generation, k, key=lambda x: self.fitness[x])
+        return self._get_nlargest(generation, k, key=lambda x: self.fitness.get(tuple(x), -1e9))
 
     def _generate_population(self, k) -> List[List[str]]:
         """
@@ -258,7 +258,7 @@ class GeneticAlgorithm:
         gen = self._generate_population(k)
 
         # Calculate the initial fitness
-        prev_fitness = self.fitness[gen[0]]
+        prev_fitness = self.fitness.get(tuple(gen[0]), -1e9)
 
         # Best chromosome
         best_chromosome = None
@@ -266,9 +266,9 @@ class GeneticAlgorithm:
 
         # Flag to stop if there is no improvements for some generations
         early_stop_flag = patience
-        for i in tqdm(range(n_trial)):
+        for i in tqdm(range(n_trial), desc='GA pbar'):
             gen = self.get_elite(gen, k)
-            gen_fitness = self.fitness[gen[0]]
+            gen_fitness = self.fitness.get(tuple(gen[0]), -1e9)
 
             if best_fitness < gen_fitness:
                 best_fitness = gen_fitness
@@ -300,10 +300,10 @@ class GeneticAlgorithm:
                 next_gen.append(c)
             gen = next_gen
             # Train autoencoders encoded in current population and save their fitness
-            for chromosome in gen:
+            for chromosome in tqdm(gen, leave=False, desc='configs pbar'):
                 model, val_loss = self._fit_autoencoder(chromosome, epochs_per_sample)
                 prev_fit = self.fitness.get(chromosome, 1e9)
-                self.fitness[chromosome] = min(self.compute_fitness(model), prev_fit)
+                self.fitness[tuple(chromosome)] = min(self.compute_fitness(model), prev_fit)
 
         # Get the best solution
         top_chromosome = self.get_elite(gen, 1)[0] if not save_best else best_chromosome
@@ -321,7 +321,7 @@ class GeneticAlgorithm:
         val_losses = []
         min_val_loss = np.inf
 
-        for epoch in range(epochs):
+        for epoch in tqdm(range(epochs), leave=False, desc='epoch pbar'):
             model.train()
             train_losses_per_epoch = []
             for i, X_batch in enumerate(self.train_loader):
@@ -351,12 +351,3 @@ class GeneticAlgorithm:
         model.load_state_dict(torch.load('./models/best_model.pth'))
         model.eval()
         return model, min(val_losses)
-
-
-if __name__ == '__main__':
-    wandb.init(project='GA_training')
-    # sample_arch = ['ReLU', 'conv_3_32_5', 'conv_32_64_5',
-    #                'conv_64_128_3', 'linear_4096_1024',
-    #                'linear_1024_512', 'linear_512_128']
-    # ga = GeneticAlgorithm([(0, 0)], [(0, 0)], 1)
-    # print(ga.mutate(sample_arch, p=1.0))

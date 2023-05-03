@@ -2,6 +2,7 @@
 from typing import List, Tuple
 import itertools  # used for optimization
 
+import torch
 # Requires installation (check requirements.txt)
 import torch.nn as nn
 
@@ -66,6 +67,7 @@ class AutoEncoder(nn.Module):
         :param cfg: List of str in the format: layertype_fanin_fanout (_kernelsize for layertype=conv)
         """
         super().__init__()
+        self.cfg = cfg
         activation = cfg[0]
         encoder_list = []
         decoder_list = []
@@ -91,13 +93,17 @@ class AutoEncoder(nn.Module):
         decoder_list.reverse()  # should be in increasing order, not decreasing
 
         # define encoder/decoder
-        self.encoder = nn.Sequential(*list(itertools.chain.from_iterable(encoder_list)))
-        self.decoder = nn.Sequential(*list(itertools.chain.from_iterable(decoder_list)))
+        self.encoder = nn.Sequential(*[l for block in encoder_list for l in block[0]])
+        self.decoder = nn.Sequential(*[l for block in decoder_list for l in block[0]])
 
-    def forward(self, x):
+    def forward(self, x: torch.Tensor):
+        x_shape = x.shape
+        if 'linear' in self.cfg[1]:
+            x = torch.reshape(x, (x.shape[0], -1))
         t = self.encoder(x)
         _x = self.decoder(t)
-        return _x
+
+        return torch.reshape(_x, x_shape), t
 
 # if __name__ == '__main__':
 #     cfg_sample = ['ReLU', 'conv_3_32_3', 'conv_32_64_3']
