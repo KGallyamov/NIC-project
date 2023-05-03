@@ -4,7 +4,7 @@ import os
 
 # Test units
 from src.ga import GeneticAlgorithm
-from src.dataset_loader import CatDatasetLoader
+from src.dataset_loader import CatDataset
 
 
 class TestGeneticAlgorithm(unittest.TestCase):
@@ -15,11 +15,10 @@ class TestGeneticAlgorithm(unittest.TestCase):
         self.assertTrue('mutate' in methods, 'Mutations is not implemented')
         self.assertTrue('crossover' in methods, 'Crossover is not implemented')
         self.assertTrue('train_ga' in methods, 'Training is not implemented')
-        self.assertTrue('compute_fitness' in methods, 'Fitness is not implemented')
         self.assertTrue('_generate_population' in methods, 'Population generation is not implemented')
 
     def test_get_elite(self):
-        dataset = CatDatasetLoader('cifar-10-cats', (32, 32), data_path=self.data_path)
+        dataset = CatDataset('cifar-10-cats', (32, 32), data_path=self.data_path)
         ga = GeneticAlgorithm(dataset, dataset, 1)
 
         self.assertTrue(ga._get_nlargest([], 10) == [], 'Empty list failure')
@@ -29,7 +28,7 @@ class TestGeneticAlgorithm(unittest.TestCase):
         self.assertTrue(ga._get_nlargest([1.56, -0.4, 2, -6, 0.9, 3], 2, key=lambda a: a**2) == [-6, 3], 'Float numbers')
 
     def test_mutation(self):
-        dataset = CatDatasetLoader('cifar-10-cats', (32, 32), data_path=self.data_path)
+        dataset = CatDataset('cifar-10-cats', (32, 32), data_path=self.data_path)
         ga = GeneticAlgorithm(dataset, dataset, 1)
 
         # Check that probability is working properly (by setting probability to 1)

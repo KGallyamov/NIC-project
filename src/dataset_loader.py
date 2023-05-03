@@ -8,7 +8,7 @@ from torch.utils.data import Dataset
 from torchvision import transforms
 
 
-class CatDatasetLoader(Dataset):
+class CatDataset(Dataset):
     def __init__(self, dataset: str, rescale_size: tuple[int, int], data_path: str = 'data', do_augmentation: bool = True):
         """
         Initialization of DatasetLoader
