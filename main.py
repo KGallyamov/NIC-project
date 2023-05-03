@@ -12,8 +12,8 @@ if __name__ == '__main__':
     train_data = CatDatasetLoader(dataset='cifar-10-cats', rescale_size=(32, 32), do_augmentation=True)
     val_data = CatDatasetLoader(dataset='cifar-10-cats', rescale_size=(32, 32), do_augmentation=False)
     ga = GeneticAlgorithm(train_data, val_data, batch_size=BATCH_SIZE)
-    ga_k = 5
-    ga_n_trial = 5
-    epochs_per_sample = 10
+    ga_k = 3
+    ga_n_trial = 4
+    epochs_per_sample = 5
     model, loss = ga.train_ga(k=ga_k, n_trial=ga_n_trial, save_best=True, epochs_per_sample=epochs_per_sample)
     torch.save(model, Path(f'./checkpoints/model_k{ga_k}_{ga_n_trial}.pth'))

@@ -302,7 +302,7 @@ class GeneticAlgorithm:
             # Train autoencoders encoded in current population and save their fitness
             for chromosome in tqdm(gen, leave=False, desc='configs pbar'):
                 model, val_loss = self._fit_autoencoder(chromosome, epochs_per_sample)
-                prev_fit = self.fitness.get(chromosome, 1e9)
+                prev_fit = self.fitness.get(tuple(chromosome), 1e9)
                 self.fitness[tuple(chromosome)] = min(self.compute_fitness(model), prev_fit)
 
         # Get the best solution
@@ -321,7 +321,7 @@ class GeneticAlgorithm:
         val_losses = []
         min_val_loss = np.inf
 
-        for epoch in tqdm(range(epochs), leave=False, desc='epoch pbar'):
+        for epoch in tqdm(range(epochs), leave=False, desc=' '.join(cfg)):
             model.train()
             train_losses_per_epoch = []
             for i, X_batch in enumerate(self.train_loader):
