@@ -18,28 +18,38 @@ from src.model import AutoEncoder
 
 class GeneticAlgorithm:
     def __init__(self, train_data, val_data, batch_size):
+        """
+        Initialization of GA
+
+        :param train_data:  data to train on
+        :param val_data:    validation data
+        :param batch_size:  size of batch
+        """
         self.train_loader = data_utils.DataLoader(train_data, batch_size=batch_size, shuffle=True)
         self.val_loader = data_utils.DataLoader(val_data, batch_size=batch_size, shuffle=False)
         self._device = torch.device('cuda') if torch.cuda.is_available() else torch.device('cpu')
         self.fitness = dict()
         self.data_size = train_data[0].shape
-        print(self.data_size)
 
     def mutate(self, x: List[str], p: float) -> List[str]:
         """
         Given config of a single AE, mutate each layer with probability p
-        sample_arch = ['ReLU', 'conv_3_32_5', 'conv_32_64_5',
-                       'conv_64_128_3', 'linear_4096_1024',
-                       'linear_1024_512', 'linear_512_128']
-        ga = GeneticAlgorithm([(0, 0)], [(0, 0)], 1)
-        print(ga.mutate(sample_arch, p=1.0))
-        (non-deterministic)
-        >>> ['Sigmoid', 'conv_3_32_5', 'conv_32_70_5', 'conv_70_128_3', 'linear_4096_1024', 'linear_1024_512', 'linear_512_128']
-        (non-deterministic)
-        >>> ['Tanh', 'conv_3_48_9', 'conv_48_128_3', 'linear_4096_1024', 'linear_1024_512', 'linear_512_128']
-        :param x: Original chromosome
-        :param p: Mutation chance
-        :return: Updated config
+
+        Examples:
+            sample_arch = ['ReLU', 'conv_3_32_5', 'conv_32_64_5',
+                           'conv_64_128_3', 'linear_4096_1024',
+                           'linear_1024_512', 'linear_512_128']
+            ga = GeneticAlgorithm([(0, 0)], [(0, 0)], 1)
+            print(ga.mutate(sample_arch, p=1.0))
+            (non-deterministic)
+            >>> ['Sigmoid', 'conv_3_32_5', 'conv_32_70_5', 'conv_70_128_3', 'linear_4096_1024', 'linear_1024_512', 'linear_512_128']
+            (non-deterministic)
+            >>> ['Tanh', 'conv_3_48_9', 'conv_48_128_3', 'linear_4096_1024', 'linear_1024_512', 'linear_512_128']
+
+
+        :param x:  original chromosome
+        :param p:  mutation chance
+        :return:   updated config
         """
         mutated_x = x.copy()
         if np.random.random() < p:  # Change the activation function with probability p
@@ -72,15 +82,16 @@ class GeneticAlgorithm:
                 mutated_x[ind - 1], mutated_x[ind] = alteration_result
         return mutated_x
 
-    def maintain_restrictions(self, x: List[str]) -> List[str]:
-        '''
+    @staticmethod
+    def maintain_restrictions(x: List[str]) -> List[str]:
+        """
         The list of restrictions:
         1. Convolutions strictly before fully connected layers
         2. Gradually decreasing number of features
 
-        :param x:
-        :return: individual with applied restrictions
-        '''
+        :param x:  config that represents autoencoder architecture
+        :return:   individual with applied restrictions
+        """
 
         # fix restriction 1 via removing any [f,c,f] and [c,f,c] sequences
         rule_1_x = [x[0]]
@@ -105,16 +116,22 @@ class GeneticAlgorithm:
 
         return rule_2_x
 
-    def _compress_layers(self, left: str, to_rm: str, right: str) -> Union[Tuple[str, str], None]:
+    @staticmethod
+    def _compress_layers(left: str, to_rm: str, right: str) -> Union[Tuple[str, str], None]:
         """
-        print(GeneticAlgorithm._compress_layers(None, 'conv_3_32_3', 'conv_32_64_5', 'conv_64_128_3'))
-        >>> ('conv_3_48_7', 'conv_48_128_3')
-        print(GeneticAlgorithm._compress_layers(None, 'linear_1000_32', 'linear_32_64', 'linear_64_128'))
-        >>> ('linear_1000_48', 'linear_48_128')
-        :param left: Layer before the layer to remove
-        :param to_rm: Layer after to compress
-        :param right: Layer after the one to be removed
-        :return: None if mutation has failed, update layers configs otherwise
+        Transform 3 continious same-type layers to 2 continious same-type layers (with the same shape)
+
+        Examples:
+            print(GeneticAlgorithm._compress_layers('conv_3_32_3', 'conv_32_64_5', 'conv_64_128_3'))
+            >>> ('conv_3_48_7', 'conv_48_128_3')
+            print(GeneticAlgorithm._compress_layers('linear_1000_32', 'linear_32_64', 'linear_64_128'))
+            >>> ('linear_1000_48', 'linear_48_128')
+
+
+        :param left:   layer before the layer to remove
+        :param to_rm:  layer after to compress
+        :param right:  layer after the one to be removed
+        :return:       None if mutation has failed, update layers configs otherwise
         """
         left_conf, to_rm_conf, right_conf = left.split('_'), to_rm.split('_'), right.split('_')
         if not left_conf[0] == to_rm_conf[0] == right_conf[0]:
@@ -131,15 +148,21 @@ class GeneticAlgorithm:
             new_right += '_' + right_kernel_size
         return new_left, new_right
 
-    def _expand_layers(self, left: str, right: str) -> Union[Tuple[str, str, str], None]:
+    @staticmethod
+    def _expand_layers(left: str, right: str) -> Union[Tuple[str, str, str], None]:
         """
-        print(GeneticAlgorithm._expand_layers(None, 'conv_32_64_5', 'conv_64_128_3'))
-        >>> ('conv_32_64_2', 'conv_64_96_4', 'conv_96_128_3')
-        print(GeneticAlgorithm._expand_layers(None, 'linear_32_64', 'linear_64_128'))
-        >>> ('linear_32_64', 'linear_64_96', 'linear_96_128')
-        :param left: Layer after which we plan to insert a new layer
-        :param right: Layer before which we plan to insert a new layer
-        :return: None if mutation has failed, updated layers configs otherwise
+        Reverse of _compress_layers (check documentation)
+
+        Examples:
+            print(GeneticAlgorithm._expand_layers('conv_32_64_5', 'conv_64_128_3'))
+            >>> ('conv_32_64_2', 'conv_64_96_4', 'conv_96_128_3')
+            print(GeneticAlgorithm._expand_layers('linear_32_64', 'linear_64_128'))
+            >>> ('linear_32_64', 'linear_64_96', 'linear_96_128')
+
+
+        :param left:   layer after which we plan to insert a new layer
+        :param right:  layer before which we plan to insert a new layer
+        :return:       None if mutation has failed, updated layers configs otherwise
         """
         left_conf, right_conf = left.split('_'), right.split('_')
         if not left_conf[0] == right_conf[0]:
@@ -155,17 +178,23 @@ class GeneticAlgorithm:
             left_conf[-1] = str(left_kernel_size // 2)
         return '_'.join(map(str, left_conf)), '_'.join(map(str, middle_conf)), '_'.join(map(str, right_conf))
 
-    def _alter_layer(self, preceding: str, layer: str) -> Union[Tuple[str, str], None]:
+    @staticmethod
+    def _alter_layer(preceding: str, layer: str) -> Union[Tuple[str, str], None]:
         """
-        print(GeneticAlgorithm._alter_layer(None, 'linear_32_64', 'linear_64_128'))
-        (non-deterministic)
-        >>> ('linear_32_108', 'linear_108_128')
-        print(GeneticAlgorithm._alter_layer(None, 'conv_32_64_5', 'conv_64_128_3'))
-        (non-deterministic)
-        >>> ('conv_32_41_5', 'conv_41_128_3')
-        :param preceding: Layer before the one to be altered
-        :param layer: layer to be altered
-        :return: None if mutation has failed, updated layers configs otherwise
+        Change one layer (e.x. number of input neurons)
+
+        Examples:
+            print(GeneticAlgorithm._alter_layer('linear_32_64', 'linear_64_128'))
+            (non-deterministic)
+            >>> ('linear_32_108', 'linear_108_128')
+            print(GeneticAlgorithm._alter_layer('conv_32_64_5', 'conv_64_128_3'))
+            (non-deterministic)
+            >>> ('conv_32_41_5', 'conv_41_128_3')
+
+
+        :param preceding:  layer before the one to be altered
+        :param layer:      layer to be altered
+        :return:           None if mutation has failed, updated layers configs otherwise
         """
         preceding_conf, layer_conf = preceding.split('_'), layer.split('_')
         if not preceding_conf[0] == layer_conf[0]:
@@ -179,6 +208,13 @@ class GeneticAlgorithm:
         return '_'.join(preceding_conf), '_'.join(layer_conf)
 
     def crossover(self, x1: List[str], x2: List[str]) -> Tuple[List[str], List[str]]:
+        """
+        Do cross-over between two architectures
+
+        :param x1:  config1 that represents autoencoder architecture
+        :param x2:  config2 that represents autoencoder architecture
+        :return:    cross-overed x1 and x2 (with maintained restrictions)
+        """
         p1 = randint(1, len(x1) - 1)
         p2 = randint(1, len(x2) - 1)
 
@@ -187,22 +223,34 @@ class GeneticAlgorithm:
 
         return child1, child2
 
-    def _get_nlargest(self, elements: List, k: int, key=lambda a: a):
-        return nlargest(k, elements, key=key)  # performs faster than sorting
+    @staticmethod
+    def _get_nlargest(elements: List, k: int, key=lambda a: a):
+        """
+        Return `k` the largest elements
+        
+        :param elements:  list of values
+        :param k:         # of top values to return
+        :param key:       function to transform elements (default lambda a: a)
+        :return:          list of top-k values
+        """
+        return nlargest(k, elements, key=key)  # performs faster than sorting + slice
 
     def get_elite(self, generation: List[List[str]], k: int) -> List[List[str]]:
         """
         Return "k" most fit samples from the population
-        :param generation: List of Chromosomes
-        :param k: # of top samples
-        :return: List of Chromosomes of length "k"
+        
+        :param generation:  list of Chromosomes
+        :param k:           # of top samples
+        :return:            list of top-k chromosomes
         """
         return self._get_nlargest(generation, k, key=lambda x: self.fitness.get(tuple(x), -1e9))
 
     def _generate_population(self, k) -> List[List[str]]:
         """
-        :param k: Size of the population
-        :return: "k" chromosomes
+        Generates population of size `k`
+        
+        :param k:  size of the population
+        :return:   'k' chromosomes
         """
         flatten_size = 1
         for shape in self.data_size:
@@ -238,14 +286,16 @@ class GeneticAlgorithm:
                  ):
         """
         Genetic Algorithm implementation (maximization)
-        :param save_best: Whether save & return best globally or best of last iteration
-        :param k: Population size
-        :param n_trial: Number of iterations
-        :param keep_parents: Elitism
-        :param patience: Parameter for early stopping
-        :return: The most fit individual after "n_trial"s
-        :param mutation_p: Probability of mutation
-        :param epochs_per_sample: The number of epochs a sample is trained on
+        
+        :param k:                  population size
+        :param n_trial:            number of iterations
+        :param keep_parents:       elitism
+        :param patience:           parameter for early stopping
+        :param mutation_p:         probability of mutation
+        :param epochs_per_sample:  the number of epochs a sample is trained on
+        :param save_best:          whether save & return best globally or best of last iteration
+        :return:                   the most fit individual after "n_trial"s
+        
         Future improvement: train all models till convergence (from early stop)
         """
         # Generate initial population
@@ -276,7 +326,7 @@ class GeneticAlgorithm:
                 break
             prev_fitness = gen_fitness
 
-            next_gen = []
+            next_gen = [self, ]
 
             # Elitism
             if keep_parents:
@@ -293,7 +343,7 @@ class GeneticAlgorithm:
 
                 next_gen.append(c)
             gen = next_gen
-            # Train autoencoders encoded in current population and save their fitness
+            # Train auto-encoders encoded in current population and save their fitness
             for chromosome in tqdm(gen, leave=False, desc='configs pbar'):
                 model, val_loss = self._fit_autoencoder(chromosome, epochs_per_sample)
                 prev_fit = self.fitness.get(tuple(chromosome), 1e9)
@@ -304,7 +354,14 @@ class GeneticAlgorithm:
         top_model, min_loss = self._fit_autoencoder(top_chromosome, epochs_per_sample)
         return top_model, min_loss
 
-    def _fit_autoencoder(self, cfg: List[str], epochs):
+    def _fit_autoencoder(self, cfg: List[str], epochs) -> tuple[AutoEncoder, np.ndarray]:
+        """
+        Fit autoencoder with structure `cfg` and train for number of `epochs`
+
+        :param cfg:     list[str] that represents autoencoder structure
+        :param epochs:  # of epochs
+        :return:        fitted model & minimum val loss
+        """
         model = AutoEncoder(cfg, self.data_size[1:])
         criterion = nn.MSELoss()
         model = model.to(self._device)
