@@ -90,7 +90,7 @@ class GeneticAlgorithm:
             rule_1_x.append(x[i])
 
         # fix restriction 2 via removing increasing sequences
-        rule_2_x = [rule_1_x[0]]
+        rule_2_x = [rule_1_x[0], rule_1_x[1]]
         min_features = int(rule_1_x[1].split('_')[1])
         for i in range(2, len(rule_1_x)):
             current_features = int(rule_1_x[i].split('_')[1])
@@ -179,10 +179,10 @@ class GeneticAlgorithm:
         p1 = randint(1, len(x1) - 1)
         p2 = randint(1, len(x2) - 1)
 
-        # child1 = self.maintain_restrictions(x1[:p1] + x2[p2:])
-        # child2 = self.maintain_restrictions(x2[:p2] + x1[p1:])
+        child1 = self.maintain_restrictions(x1[:p1] + x2[p2:])
+        child2 = self.maintain_restrictions(x2[:p2] + x1[p1:])
 
-        return x1, x2
+        return child1, child2
 
     def compute_fitness(self, *args, **kwargs) -> float:
         """
