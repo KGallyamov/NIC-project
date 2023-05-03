@@ -47,15 +47,15 @@ class TestAutoEncoder(unittest.TestCase):
     def test_forward(self):
         dataset = CatDatasetLoader('cifar-10-cats', (32, 32), data_path=self.data_path)
 
-        example = ['ReLU', 'conv_3_32_3', 'conv_32_64_3', 'linear_128_64', 'linear_64_32']
+        example = ['ReLU', 'conv_3_32_3', 'conv_32_64_3', 'conv_64_128_3']
         autoencoder = AutoEncoder(example)
 
         n_trials = 100
         for _ in range(n_trials):
             ind = random.randint(0, len(dataset) - 1)
-
-            result = autoencoder.forward(dataset[ind])
-            self.assertTrue(result.size() == dataset[ind].size(), 'Incorrect output shape')
+            img = dataset[ind].reshape(1, *dataset[ind].size())
+            result, hidden = autoencoder.forward(img)
+            self.assertTrue(result.size() == img.size(), 'Incorrect output shape')
 
 
 if __name__ == '__main__':
