@@ -4,13 +4,13 @@ import wandb
 import torch
 from src.ga import GeneticAlgorithm
 from src.constants import BATCH_SIZE
-from src.dataset_loader import CatDatasetLoader
+from src.dataset_loader import CatDataset
 
 
 if __name__ == '__main__':
     wandb.init(project='GA_training', entity='b21ds01-nic-project')
-    train_data = CatDatasetLoader(dataset='cifar-10-cats', rescale_size=(32, 32), do_augmentation=True)
-    val_data = CatDatasetLoader(dataset='cifar-10-cats', rescale_size=(32, 32), do_augmentation=False)
+    train_data = CatDataset(dataset='cifar-10-cats', rescale_size=(32, 32), do_augmentation=True)
+    val_data = CatDataset(dataset='cifar-10-cats', rescale_size=(32, 32), do_augmentation=False)
     ga = GeneticAlgorithm(train_data, val_data, batch_size=BATCH_SIZE)
     ga_k = 3
     ga_n_trial = 4

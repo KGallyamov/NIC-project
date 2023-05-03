@@ -79,6 +79,7 @@ class AutoEncoder(nn.Module):
         activation = cfg[0]
         encoder_list = []
         decoder_list = []
+        card_height, card_width = image_shape
 
         for i in range(1, len(cfg)):
             layer_cfg = cfg[i]
@@ -87,12 +88,14 @@ class AutoEncoder(nn.Module):
             enc_, dec_ = _resolve_layer(layer_cfg, activation)
 
             # Add symmetric layers to encoder and decoder
+            if 'conv' in cfg[i].lower():
+                kernel_size = int(cfg[i].split('_')[-1])
+                card_height, card_width = card_height - kernel_size + 1, card_width - kernel_size + 1
+            if 'conv' in cfg[i - 1].lower() and 'linear' in cfg[i].lower():
+                enc_layer.insert(0, [nn.Flatten()])
+                dec_.insert(-1, nn.Unflatten(1, (int(cfg[i - 1].split('_')[2]), card_height, card_width)))
             enc_layer.append(enc_)
             dec_layer.append(dec_)
-            if 'conv' in cfg[i - 1].lower() and 'linear' in cfg[i].lower():
-                assert NotImplementedError
-                # enc_layer.insert(0, [nn.Flatten()])
-                # dec_layer.append([nn.Unflatten(1, (int(cfg[i - 1].split('_')[2]), ??, ??))])
 
             # save layers
             encoder_list.append(enc_layer)

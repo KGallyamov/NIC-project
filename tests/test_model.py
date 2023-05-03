@@ -1,12 +1,14 @@
 # Test libraries
 import unittest
+
+import torch
 import torch.nn as nn
 import os
 import random
 
 # Test units
 from src.model import AutoEncoder, iterate
-from src.dataset_loader import CatDatasetLoader
+from src.dataset_loader import CatDataset
 
 
 class TestIterate(unittest.TestCase):
@@ -31,6 +33,7 @@ class TestIterate(unittest.TestCase):
 
 class TestAutoEncoder(unittest.TestCase):
     data_path = os.path.join(os.path.dirname(os.getcwd()), 'data')
+    image_shape = (32, 32)
 
     def test_methods_exist(self):
         methods = dir(AutoEncoder)
@@ -38,24 +41,24 @@ class TestAutoEncoder(unittest.TestCase):
 
     def test_autoencoder_work(self):
         example = ['ReLU', 'conv_3_32_3', 'conv_32_64_3']
-        autoencoder = AutoEncoder(example)
+        autoencoder = AutoEncoder(example, self.image_shape)
 
         self.assertTrue(type(autoencoder) == AutoEncoder, 'AutoEncoder class do now run')
         self.assertTrue(type(autoencoder.encoder) == nn.Sequential, 'Encoder is not defined')
         self.assertTrue(type(autoencoder.decoder) == nn.Sequential, 'Decoder is not defined')
 
     def test_forward(self):
-        dataset = CatDatasetLoader('cifar-10-cats', (32, 32), data_path=self.data_path)
-
-        example = ['ReLU', 'conv_3_32_3', 'conv_32_64_3', 'conv_64_128_3']
+        dataset = CatDataset('cifar-10-cats', self.image_shape, data_path=self.data_path)
+        fin = 64 * 28 * 28
+        example = ['ReLU', 'conv_3_32_3', 'conv_32_64_3', f'linear_{fin}_1024', 'linear_1024_512', 'linear_512_256']
         autoencoder = AutoEncoder(example, self.image_shape)
 
         n_trials = 100
         for _ in range(n_trials):
             ind = random.randint(0, len(dataset) - 1)
-
-            result = autoencoder.forward(dataset[ind])
-            self.assertTrue(result.size() == dataset[ind].size(), 'Incorrect output shape')
+            img = torch.reshape(dataset[ind], (1, *dataset[ind].shape))
+            result, hidden = autoencoder.forward(img)
+            self.assertTrue(result.size() == img.size(), 'Incorrect output shape')
 
 
 if __name__ == '__main__':

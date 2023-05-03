@@ -23,6 +23,7 @@ class GeneticAlgorithm:
         self._device = torch.device('cuda') if torch.cuda.is_available() else torch.device('cpu')
         self.fitness = dict()
         self.data_size = train_data[0].shape
+        print(self.data_size)
 
     def mutate(self, x: List[str], p: float) -> List[str]:
         """
@@ -304,7 +305,7 @@ class GeneticAlgorithm:
         return top_model, min_loss
 
     def _fit_autoencoder(self, cfg: List[str], epochs):
-        model = AutoEncoder(cfg)
+        model = AutoEncoder(cfg, self.data_size[1:])
         criterion = nn.MSELoss()
         model = model.to(self._device)
 
