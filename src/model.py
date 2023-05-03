@@ -1,6 +1,6 @@
 # Default libraries
 from typing import List, Tuple
-import itertools  # used for optimization
+from collections.abc import Iterable
 
 import torch
 # Requires installation (check requirements.txt)
@@ -8,6 +8,14 @@ import torch.nn as nn
 
 # Our units
 from src.constants import ACTIVATIONS
+
+
+def iterate(iterable):
+    for elem in iterable:
+        if isinstance(elem, Iterable):
+            yield from iterate(elem)
+        else:
+            yield elem
 
 
 def _resolve_act(activation: str) -> nn.Module:
@@ -93,8 +101,8 @@ class AutoEncoder(nn.Module):
         decoder_list.reverse()  # should be in increasing order, not decreasing
 
         # define encoder/decoder
-        self.encoder = nn.Sequential(*[l for block in encoder_list for l in block[0]])
-        self.decoder = nn.Sequential(*[l for block in decoder_list for l in block[0]])
+        self.encoder = nn.Sequential(*list(iterate(encoder_list)))
+        self.decoder = nn.Sequential(*list(iterate(decoder_list)))
 
     def forward(self, x: torch.Tensor):
         x_shape = x.shape
