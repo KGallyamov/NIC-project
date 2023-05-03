@@ -49,7 +49,9 @@ class TestAutoEncoder(unittest.TestCase):
 
     def test_forward(self):
         dataset = CatDataset('cifar-10-cats', self.image_shape, data_path=self.data_path)
-        example = ['ReLU', 'conv_3_32_3', 'conv_32_64_3', f'linear_2048_1024', 'linear_1024_512', 'linear_512_256']
+        # example = ['ReLU', 'conv_3_32_3', 'conv_32_64_3', 'linear_2048_1024', 'linear_1024_512', 'linear_512_256']
+        example = ['ReLU', 'linear_1024_1024', 'linear_1024_512', 'linear_512_256']
+
         autoencoder = AutoEncoder(example, self.image_shape)
 
         n_trials = 100

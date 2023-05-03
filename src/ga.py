@@ -318,7 +318,8 @@ class GeneticAlgorithm:
                 best_fitness = gen_fitness
                 best_chromosome = gen[0]
 
-            wandb.log({"val_loss": -best_fitness, "step": i})
+            if best_fitness != -1e9:
+                wandb.log({"val_loss": best_fitness, "step": i})
 
             early_stop_flag = early_stop_flag - 1 if prev_fitness - gen_fitness >= 0 else patience
             if early_stop_flag == 0:
@@ -326,7 +327,7 @@ class GeneticAlgorithm:
                 break
             prev_fitness = gen_fitness
 
-            next_gen = [self, ]
+            next_gen = []
 
             # Elitism
             if keep_parents:

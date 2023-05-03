@@ -79,7 +79,7 @@ def _resolve_layer(layer_cfg: str, activation: str) -> Tuple[List[nn.Module], Li
 
 
 class AutoEncoder(nn.Module):
-    def __init__(self, cfg: List[str], image_shape: tuple[int, int]):
+    def __init__(self, cfg: List[str], image_shape: tuple[int, int], n_channels=3):
         """
         :param cfg: List of str in the format: layertype_fanin_fanout (_kernelsize for layertype=conv)
         """
@@ -90,12 +90,15 @@ class AutoEncoder(nn.Module):
         decoder_list = []
         card_height, card_width = image_shape
 
+        if 'linear' in cfg[1].lower() and int(cfg[1].split('_')[1]) != n_channels * card_width * card_height:
+            fan_out = cfg[1].split('_')[1]
+            cfg.insert(1, f'linear_{n_channels * card_width * card_height}_{fan_out}')
+
         for i in range(1, len(cfg)):
             layer_cfg = cfg[i]
             enc_layer = []
             dec_layer = []
             enc_, dec_ = _resolve_layer(layer_cfg, activation)
-
             # Add symmetric layers to encoder and decoder
             if 'conv' in cfg[i].lower():
                 kernel_size = int(cfg[i].split('_')[-1])
