@@ -170,7 +170,10 @@ class GeneticAlgorithm:
         preceding_conf, layer_conf = preceding.split('_'), layer.split('_')
         if not preceding_conf[0] == layer_conf[0]:
             return None
-        new_neurons_num = np.random.randint(*sorted([int(preceding_conf[1]), int(layer_conf[2])]))
+        try:
+            new_neurons_num = np.random.randint(*sorted([int(preceding_conf[1]), int(layer_conf[2])]))
+        except ValueError:
+            return None
         preceding_conf[2] = str(new_neurons_num)
         layer_conf[1] = str(new_neurons_num)
         return '_'.join(preceding_conf), '_'.join(layer_conf)
