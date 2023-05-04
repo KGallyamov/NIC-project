@@ -8,7 +8,7 @@ import random
 
 # Test units
 from src.model import AutoEncoder, iterate
-from src.dataset_loader import CatDataset
+from src.dataset_loader import CatDataset, parse_dataset
 
 
 class TestIterate(unittest.TestCase):
@@ -48,9 +48,9 @@ class TestAutoEncoder(unittest.TestCase):
         self.assertTrue(type(autoencoder.decoder) == nn.Sequential, 'Decoder is not defined')
 
     def test_forward(self):
-        dataset = CatDataset('cifar-10-cats', self.image_shape, data_path=self.data_path)
-        # example = ['ReLU', 'conv_3_32_3', 'conv_32_64_3', 'linear_2048_1024', 'linear_1024_512', 'linear_512_256']
-        example = ['ReLU', 'linear_1024_1024', 'linear_1024_512', 'linear_512_256']
+        dataset = CatDataset(dataset='cats', rescale_size=self.image_shape, data_path=self.data_path)
+        example = ['ReLU', 'conv_32_32_3', 'conv_32_64_3', 'linear_2048_1024', 'linear_1024_512', 'linear_512_256']
+        # example = ['ReLU', 'linear_1024_1024', 'linear_1024_512', 'linear_512_256']
 
         autoencoder = AutoEncoder(example, self.image_shape)
 

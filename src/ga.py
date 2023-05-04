@@ -1,4 +1,5 @@
 # Default libraries
+import gc
 from typing import List, Tuple, Union
 from random import randint, choice, choices, random
 from heapq import nlargest  # used for optimization
@@ -14,6 +15,14 @@ import torch.utils.data as data_utils
 # Our units
 from src.constants import ACTIVATIONS, LINEAR_FEATURES, CONV_FEATURES, KERNEL_SIZE, KERNEL_SIZE_WEIGHTS, LATENT_SIZE
 from src.model import AutoEncoder
+
+from numba import cuda
+
+def free_gpu_cache():
+    torch.cuda.empty_cache()
+    cuda.select_device(0)
+    cuda.close()
+    cuda.select_device(0)
 
 
 class GeneticAlgorithm:
@@ -64,7 +73,7 @@ class GeneticAlgorithm:
                 mutated_x.insert(ind + 1, new_layer)
             return mutated_x
         # Delete a random layer with probability p / 3
-        elif p / 3 < action_prob < 2 * p / 3 and len(mutated_x) > 3:
+        elif p / 3 < action_prob < 2 * p / 3 and len(mutated_x) > 4:
             ind = np.random.randint(2, len(mutated_x) - 2)
             rm_layer = mutated_x[ind]
             del mutated_x[ind]
@@ -242,7 +251,7 @@ class GeneticAlgorithm:
     def _get_nlargest(elements: List, k: int, key=lambda a: a):
         """
         Return `k` the largest elements
-        
+
         :param elements:  list of values
         :param k:         # of top values to return
         :param key:       function to transform elements (default lambda a: a)
@@ -253,7 +262,7 @@ class GeneticAlgorithm:
     def get_elite(self, generation: List[List[str]], k: int) -> List[List[str]]:
         """
         Return "k" most fit samples from the population
-        
+
         :param generation:  list of Chromosomes
         :param k:           # of top samples
         :return:            list of top-k chromosomes
@@ -263,7 +272,7 @@ class GeneticAlgorithm:
     def _generate_population(self, k) -> List[List[str]]:
         """
         Generates population of size `k`
-        
+
         :param k:  size of the population
         :return:   'k' chromosomes
         """
@@ -301,7 +310,7 @@ class GeneticAlgorithm:
                  ):
         """
         Genetic Algorithm implementation (maximization)
-        
+
         :param k:                  population size
         :param n_trial:            number of iterations
         :param keep_parents:       elitism
@@ -310,7 +319,7 @@ class GeneticAlgorithm:
         :param epochs_per_sample:  the number of epochs a sample is trained on
         :param save_best:          whether save & return best globally or best of last iteration
         :return:                   the most fit individual after "n_trial"s
-        
+
         Future improvement: train all models till convergence (from early stop)
         """
         # Generate initial population
@@ -361,16 +370,19 @@ class GeneticAlgorithm:
             gen = next_gen
             # Train auto-encoders encoded in current population and save their fitness
             for chromosome in tqdm(gen, leave=False, desc='configs pbar'):
-                model, val_loss = self._fit_autoencoder(chromosome, epochs_per_sample)
+                try:
+                    val_loss = self._fit_autoencoder(chromosome, epochs_per_sample)
+                except RuntimeError:
+                    val_loss = 1e9
                 prev_fit = self.fitness.get(tuple(chromosome), 1e9)
                 self.fitness[tuple(chromosome)] = min(val_loss, prev_fit)
 
         # Get the best solution
         top_chromosome = self.get_elite(gen, 1)[0] if not save_best else best_chromosome
-        top_model, min_loss = self._fit_autoencoder(top_chromosome, 20)
+        top_model, min_loss = self._fit_autoencoder(top_chromosome, 10, return_model=True)
         return top_model, min_loss
 
-    def _fit_autoencoder(self, cfg: List[str], epochs) -> tuple[AutoEncoder, np.ndarray]:
+    def _fit_autoencoder(self, cfg: List[str], epochs, return_model=False) -> Union[tuple[AutoEncoder, float], float]:
         """
         Fit autoencoder with structure `cfg` and train for number of `epochs`
 
@@ -415,11 +427,16 @@ class GeneticAlgorithm:
             if val_losses[-1] <= min_val_loss:
                 min_val_loss = val_losses[-1]
                 torch.save(model.state_dict(), './models/best_model.pth')
+        if return_model:
+            model.load_state_dict(torch.load('./models/best_model.pth'))
+            model.eval()
+            return model, np.min(val_losses)
+        del model
+        torch.cuda.empty_cache()
+        gc.collect()
+        # free_gpu_cache()
 
-        model.load_state_dict(torch.load('./models/best_model.pth'))
-        model.eval()
-        return model, min(val_losses)
-
+        return np.min(val_losses)
 
 # if __name__ == '__main__':
 #     ga = GeneticAlgorithm([np.zeros((3, 32, 32))], [np.zeros((3, 32, 32))], 1)

@@ -98,6 +98,10 @@ class AutoEncoder(nn.Module):
             fan_out = cfg[1].split('_')[1]
             cfg.insert(1, f'linear_{n_channels * card_width * card_height}_{fan_out}')
 
+        if 'conv' in cfg[1].lower() and int(cfg[1].split('_')[1]) != n_channels:
+            out_cards = int(cfg[1].split('_')[1])
+            cfg.insert(1, f'conv_{n_channels}_{out_cards}_1')
+
         for i in range(1, len(cfg)):
             layer_cfg = cfg[i]
             enc_layer = []
