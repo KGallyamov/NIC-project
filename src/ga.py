@@ -40,6 +40,9 @@ class GeneticAlgorithm:
         self.fitness = dict()
         self.data_size = train_data[0].shape
 
+        self.n_runs = 0
+        self.skips = []
+
     def mutate(self, x: List[str], p: float) -> List[str]:
         """
         Given config of a single AE, mutate each layer with probability p
@@ -371,16 +374,23 @@ class GeneticAlgorithm:
             # Train auto-encoders encoded in current population and save their fitness
             for chromosome in tqdm(gen, leave=False, desc='configs pbar'):
                 try:
+                    self.n_runs += 1
                     val_loss = self._fit_autoencoder(chromosome, epochs_per_sample)
                 except RuntimeError:
                     val_loss = 1e9
+                    self.skips.append(chromosome)
                 prev_fit = self.fitness.get(tuple(chromosome), 1e9)
                 self.fitness[tuple(chromosome)] = min(val_loss, prev_fit)
 
+        self.print_stats()
         # Get the best solution
         top_chromosome = self.get_elite(gen, 1)[0] if not save_best else best_chromosome
         top_model, min_loss = self._fit_autoencoder(top_chromosome, 10, return_model=True)
         return top_model, min_loss
+
+    def print_stats(self):
+        print(f'Out of {self.n_runs} runs, {len(self.skips)} was skipped ({len(self.skips) / self.n_runs * 100}%)')
+        print(*self.skips, sep='\n')
 
     def _fit_autoencoder(self, cfg: List[str], epochs, return_model=False) -> Union[tuple[AutoEncoder, float], float]:
         """
