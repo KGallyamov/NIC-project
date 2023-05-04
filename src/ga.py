@@ -1,7 +1,7 @@
 # Default libraries
 import gc
 from typing import List, Tuple, Union
-from random import randint, choice, choices, random
+from random import randint, choice, choices
 from heapq import nlargest  # used for optimization
 
 # Code for GA training is adapted from the labs
@@ -13,16 +13,8 @@ import torch.nn as nn
 import torch.utils.data as data_utils
 
 # Our units
-from src.constants import ACTIVATIONS, LINEAR_FEATURES, CONV_FEATURES, KERNEL_SIZE, KERNEL_SIZE_WEIGHTS, LATENT_SIZE
+from src.constants import ACTIVATIONS, LINEAR_FEATURES, LATENT_SIZE
 from src.model import AutoEncoder
-
-from numba import cuda
-
-def free_gpu_cache():
-    torch.cuda.empty_cache()
-    cuda.select_device(0)
-    cuda.close()
-    cuda.select_device(0)
 
 
 class GeneticAlgorithm:
@@ -48,15 +40,14 @@ class GeneticAlgorithm:
         Given config of a single AE, mutate each layer with probability p
 
         Examples:
-            sample_arch = ['ReLU', 'conv_3_32_5', 'conv_32_64_5',
-                           'conv_64_128_3', 'linear_4096_1024',
+            sample_arch = ['ReLU', 'linear_4096_1024',
                            'linear_1024_512', 'linear_512_128']
             ga = GeneticAlgorithm([(0, 0)], [(0, 0)], 1)
             print(ga.mutate(sample_arch, p=1.0))
             (non-deterministic)
-            >>> ['Sigmoid', 'conv_3_32_5', 'conv_32_70_5', 'conv_70_128_3', 'linear_4096_1024', 'linear_1024_512', 'linear_512_128']
+            >>> ['Sigmoid', 'linear_4096_512', 'linear_512_128']
             (non-deterministic)
-            >>> ['Tanh', 'conv_3_48_9', 'conv_48_128_3', 'linear_4096_1024', 'linear_1024_512', 'linear_512_128']
+            >>> ['Tanh', 'linear_4096_2048', 'linear_2048_1024', 'linear_1024_512', 'linear_512_128']
 
 
         :param x:  original chromosome
@@ -98,29 +89,20 @@ class GeneticAlgorithm:
     def maintain_restrictions(x: List[str]) -> List[str]:
         """
         The list of restrictions:
-        1. Convolutions strictly before fully connected layers
-        2. Gradually decreasing number of features
+        1. Gradually decreasing number of features
 
         :param x:  config that represents autoencoder architecture
         :return:   individual with applied restrictions
         """
 
         # fix restriction 1 via removing any [f,c,f] and [c,f,c] sequences
-        rule_1_x = [x[0]]
-        for i in range(1, len(x)):
-            if rule_1_x[-1].split('_')[0] == 'linear' and x[i].split('_')[0] == 'conv':
-                continue
-            rule_1_x.append(x[i])
+        rule_1_x = x.copy()
 
         # fix restriction 2 via removing increasing sequences
         rule_2_x = [rule_1_x[0], rule_1_x[1]]
         min_features = int(rule_1_x[1].split('_')[2])
         for i in range(2, len(rule_1_x)):
             current_features = int(rule_1_x[i].split('_')[1])
-            if rule_1_x[i - 1].split('_')[0] == 'conv' and rule_1_x[i].split('_')[0] == 'linear':
-                min_features = current_features
-                rule_2_x.append(rule_1_x[i])
-                continue
 
             if min_features >= current_features:
                 min_features = current_features
@@ -132,16 +114,7 @@ class GeneticAlgorithm:
                 gen_next = rule_2_x[i].split('_')
                 rule_2_x[i - 1] = '_'.join([gen_prev[0], gen_prev[1], gen_next[1]] + gen_prev[3:])
 
-        rule_3_x = [rule_2_x[0]]
-        conv_limit = 4
-        for i in range(1, len(rule_2_x)):
-            if rule_2_x[i].split('_')[0] == 'linear':
-                rule_3_x.append(rule_2_x[i])
-            elif rule_2_x[i].split('_')[0] == 'conv' and conv_limit > 0:
-                rule_3_x.append(rule_2_x[i])
-                conv_limit -= 1
-
-        return rule_3_x
+        return rule_2_x
 
     @staticmethod
     def _compress_layers(left: str, to_rm: str, right: str) -> Union[Tuple[str, str], None]:
@@ -149,8 +122,6 @@ class GeneticAlgorithm:
         Transform 3 continious same-type layers to 2 continious same-type layers (with the same shape)
 
         Examples:
-            print(GeneticAlgorithm._compress_layers('conv_3_32_3', 'conv_32_64_5', 'conv_64_128_3'))
-            >>> ('conv_3_48_7', 'conv_48_128_3')
             print(GeneticAlgorithm._compress_layers('linear_1000_32', 'linear_32_64', 'linear_64_128'))
             >>> ('linear_1000_48', 'linear_48_128')
 
@@ -167,12 +138,6 @@ class GeneticAlgorithm:
         new_left = '_'.join(map(str, [*left_conf[:2], (left_fan_out + right_fan_in) // 2]))
         new_right = '_'.join(map(str, [right.split('_')[0], (left_fan_out + right_fan_in) // 2, right_conf[2]]))
 
-        if 'conv' in left:
-            left_kernel_size = int(left_conf[-1])
-            to_rm_kernel_size = int(to_rm_conf[-1])
-            right_kernel_size = right_conf[-1]
-            new_left += '_' + str(left_kernel_size + to_rm_kernel_size - 1)
-            new_right += '_' + right_kernel_size
         return new_left, new_right
 
     @staticmethod
@@ -181,8 +146,6 @@ class GeneticAlgorithm:
         Reverse of _compress_layers (check documentation)
 
         Examples:
-            print(GeneticAlgorithm._expand_layers('conv_32_64_5', 'conv_64_128_3'))
-            >>> ('conv_32_64_2', 'conv_64_96_4', 'conv_96_128_3')
             print(GeneticAlgorithm._expand_layers('linear_32_64', 'linear_64_128'))
             >>> ('linear_32_64', 'linear_64_96', 'linear_96_128')
 
@@ -197,12 +160,6 @@ class GeneticAlgorithm:
         middle_neurons = (int(left_conf[2]) + int(right_conf[2])) // 2
         middle_conf = [left_conf[0], int(left_conf[2]), middle_neurons]
         right_conf[1] = str(middle_neurons)
-        if 'conv' in left:
-            left_kernel_size = int(left_conf[-1])
-            if left_kernel_size < 2:
-                return None
-            middle_conf.append(str(left_kernel_size - left_kernel_size // 2 + 1))
-            left_conf[-1] = str(left_kernel_size // 2)
         return '_'.join(map(str, left_conf)), '_'.join(map(str, middle_conf)), '_'.join(map(str, right_conf))
 
     @staticmethod
@@ -214,10 +171,6 @@ class GeneticAlgorithm:
             print(GeneticAlgorithm._alter_layer('linear_32_64', 'linear_64_128'))
             (non-deterministic)
             >>> ('linear_32_108', 'linear_108_128')
-            print(GeneticAlgorithm._alter_layer('conv_32_64_5', 'conv_64_128_3'))
-            (non-deterministic)
-            >>> ('conv_32_41_5', 'conv_41_128_3')
-
 
         :param preceding:  layer before the one to be altered
         :param layer:      layer to be altered
@@ -287,13 +240,7 @@ class GeneticAlgorithm:
         for _ in range(k):
             individual = [choice(ACTIVATIONS)]
 
-            n_layers = randint(0, 4)
-            features = [3] + sorted(choices(CONV_FEATURES, k=n_layers), reverse=True)
-            kernel_sizes = sorted(choices(KERNEL_SIZE, weights=KERNEL_SIZE_WEIGHTS, k=n_layers), reverse=True)
-            for i in range(n_layers):
-                individual.append(f"conv_{features[i]}_{features[i + 1]}_{kernel_sizes[i]}")
-
-            n_layers = randint(int(n_layers == 0), 4)
+            n_layers = randint(3, 6)
             features = [flatten_size] + sorted(choices(LINEAR_FEATURES, k=n_layers), reverse=True)
             for i in range(n_layers):
                 individual.append(f"linear_{features[i]}_{features[i + 1]}")
@@ -329,23 +276,23 @@ class GeneticAlgorithm:
         gen = self._generate_population(k)
 
         # Calculate the initial fitness
-        prev_fitness = self.fitness.get(tuple(gen[0]), -1e9)
+        prev_fitness = self.fitness.get(tuple(gen[0]), 1e9)
 
         # Best chromosome
         best_chromosome = None
-        best_fitness = -1e9
+        best_fitness = 1e9
 
         # Flag to stop if there is no improvements for some generations
         early_stop_flag = patience
         for i in tqdm(range(n_trial), desc='GA pbar'):
             gen = self.get_elite(gen, k)
-            gen_fitness = self.fitness.get(tuple(gen[0]), -1e9)
+            gen_fitness = self.fitness.get(tuple(gen[0]), 1e9)
 
-            if best_fitness <= gen_fitness:
+            if best_fitness >= gen_fitness:
                 best_fitness = gen_fitness
                 best_chromosome = gen[0]
 
-            if best_fitness != -1e9:
+            if np.abs(best_fitness) < 1e9:
                 wandb.log({"val_loss": best_fitness, "step": i})
 
             early_stop_flag = early_stop_flag - 1 if prev_fitness - gen_fitness >= 0 else patience
@@ -385,8 +332,8 @@ class GeneticAlgorithm:
         self.print_stats()
         # Get the best solution
         top_chromosome = self.get_elite(gen, 1)[0] if not save_best else best_chromosome
-        top_model, min_loss = self._fit_autoencoder(top_chromosome, 1, return_model=True)
-        return top_model, min_loss
+        top_model, min_loss, l_means, l_stds = self._fit_autoencoder(top_chromosome, 40, return_model=True)
+        return top_model, min_loss, l_means, l_stds
 
     def print_stats(self):
         print(f'Out of {self.n_runs} runs, {len(self.skips)} was skipped ({len(self.skips) / self.n_runs * 100}%)')
@@ -412,6 +359,7 @@ class GeneticAlgorithm:
 
         patience = 3
         early_stop_flag = patience
+
         for epoch in tqdm(range(epochs), leave=False, desc=' '.join(cfg)):
             model.train()
             train_losses_per_epoch = []
@@ -435,10 +383,8 @@ class GeneticAlgorithm:
                     loss = criterion(reconstructed, batch)
                     val_losses_per_epoch.append(loss.item())
             val_losses.append(np.mean(val_losses_per_epoch))
-            # print(np.mean(val_losses_per_epoch))
             early_stop_flag = early_stop_flag - 1 if min_val_loss < np.mean(val_losses_per_epoch) else patience
             if early_stop_flag == 0:
-                # print('Early stop in model train')
                 break
             if val_losses[-1] <= min_val_loss:
                 min_val_loss = val_losses[-1]
@@ -446,13 +392,21 @@ class GeneticAlgorithm:
         if return_model:
             model.load_state_dict(torch.load('./models/best_model.pth'))
             model.eval()
-            return model, np.min(val_losses)
+            latent_vectors = []
+            with torch.no_grad():
+                for i, X_batch in enumerate(self.train_loader):
+                    optimizer.zero_grad()
+                    batch = X_batch.to(self._device)
+                    reconstructed, latent = model(batch)
+                    lv = latent.detach().cpu().numpy()
+                    for j in range(lv.shape[0]):
+                        latent_vectors.append(lv[j])
+            latent_vectors = np.array(latent_vectors)
+            means = latent_vectors.mean(axis=0)
+            stds = latent_vectors.std(axis=0)
+            return model, np.min(val_losses), means, stds
         del model
         torch.cuda.empty_cache()
         gc.collect()
 
         return np.min(val_losses)
-
-# if __name__ == '__main__':
-#     ga = GeneticAlgorithm([np.zeros((3, 32, 32))], [np.zeros((3, 32, 32))], 1)
-#     print(ga.maintain_restrictions(['LReLU', 'conv_3_64_7', 'conv_64_12_5', 'conv_12_12_3', 'conv_12_12_3', 'conv_12_12_3', 'conv_12_4_3', 'linear_128_64']))

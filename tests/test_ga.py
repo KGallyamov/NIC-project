@@ -45,9 +45,9 @@ class TestGeneticAlgorithm(unittest.TestCase):
         self.assertTrue(all(mutated == sample1 for mutated in tries_results_0), 'Mutation probability 0 did change sample')
 
         # Check that all types of mutations are present
-        n_tries = 100
+        n_tries = 1000
         tries_results = []
-        sample2 = ['Sigmoid', 'conv_3_32_5', 'conv_32_70_5', 'conv_70_128_3', 'linear_4096_1024', 'linear_1024_512', 'linear_512_128']
+        sample2 = ['Sigmoid', 'linear_4096_1024', 'linear_1024_512', 'linear_512_128', 'linear_128_64', 'linear_64_32']
 
         for _ in range(n_tries):
             tries_results.append(ga.mutate(sample2, 1))

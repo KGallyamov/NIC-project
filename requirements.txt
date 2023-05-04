@@ -1,9 +1,9 @@
 numpy~=1.23.4
-torch~=1.12.1
+torch~=1.13.1
 tqdm~=4.64.1
 wandb~=0.15.0
 torchvision~=0.13.1
-Pillow~=9.1.1
+Pillow~=9.2.0
 matplotlib~=3.6.3
 sklearn~=0.0.post1
 scikit-learn~=1.2.0
