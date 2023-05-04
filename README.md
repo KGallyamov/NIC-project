@@ -9,10 +9,10 @@ to achieve acceptable performance.
 We overcame one of these challenges by using 
 [genetic algorithms](https://en.wikipedia.org/wiki/Genetic_algorithm) 
 for architecture tuning. As a result, we achieved a pipeline to improve
-architecture on [CIFAR-10 dataset](https://www.cs.toronto.edu/~kriz/cifar.html)
+architecture on [Cats faces dataset](https://www.kaggle.com/datasets/spandan2/cats-faces-64x64-for-generative-models)
 cat generation.
 
-If you are interested in our research, you can   read our findings [here](link in progress)
+If you are interested in our research, you can read our findings [here](link in progress)
 
 # Credits
 * Polina Zelenskaya (p.zelenskaya@innopolis.university)
