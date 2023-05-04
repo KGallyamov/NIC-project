@@ -18,4 +18,3 @@ If you are interested in our research, you can   read our findings [here](link i
 * Polina Zelenskaya (p.zelenskaya@innopolis.university)
 * Karim Galliamov (k.galliamov@innopolis.university)
 * Igor Abramov (ig.abramov@innopolis.university)
-
