@@ -40,7 +40,7 @@ class TestAutoEncoder(unittest.TestCase):
         self.assertTrue('forward' in methods, 'Forward is not implemented')
 
     def test_autoencoder_work(self):
-        example = ['ReLU', 'conv_3_32_3', 'conv_32_64_3']
+        example = ['ReLU', 'linear_3_32', 'linear_32_64']
         autoencoder = AutoEncoder(example, self.image_shape)
 
         self.assertTrue(type(autoencoder) == AutoEncoder, 'AutoEncoder class do now run')
@@ -49,8 +49,7 @@ class TestAutoEncoder(unittest.TestCase):
 
     def test_forward(self):
         dataset = CatDataset(dataset='cats', rescale_size=self.image_shape, data_path=self.data_path)
-        example = ['ReLU', 'conv_32_32_3', 'conv_32_64_3', 'linear_2048_1024', 'linear_1024_512', 'linear_512_256']
-        # example = ['ReLU', 'linear_1024_1024', 'linear_1024_512', 'linear_512_256']
+        example = ['ReLU', 'linear_2048_1024', 'linear_1024_512', 'linear_512_256']
 
         autoencoder = AutoEncoder(example, self.image_shape)
 

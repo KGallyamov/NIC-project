@@ -56,20 +56,7 @@ def _resolve_layer(layer_cfg: str, activation: str) -> Tuple[List[nn.Module], Li
     l_type = layer_cfg.split('_')[0]
     enc_layer, dec_layer = None, None
     fan_in, fan_out = map(int, layer_cfg.split('_')[1:3])
-    if l_type.lower() == 'conv':
-        kernel_size = int(layer_cfg.split('_')[-1])
-        enc_layer = [
-            nn.Conv2d(fan_in, fan_out, kernel_size),
-            _resolve_act(activation),
-            nn.BatchNorm2d(fan_out),
-        ]
-        dec_layer = [
-            nn.ConvTranspose2d(fan_out, fan_in, kernel_size),
-            _resolve_act(activation),
-            nn.BatchNorm2d(fan_in),
-        ]
-
-    elif l_type.lower() == 'linear':
+    if l_type.lower() == 'linear':
         enc_layer = [nn.Linear(fan_in, fan_out), _resolve_act(activation)]
         dec_layer = [nn.Linear(fan_out, fan_in), _resolve_act(activation)]
     else:
@@ -98,29 +85,11 @@ class AutoEncoder(nn.Module):
             fan_out = cfg[1].split('_')[1]
             cfg.insert(1, f'linear_{n_channels * card_width * card_height}_{fan_out}')
 
-        if 'conv' in cfg[1].lower() and int(cfg[1].split('_')[1]) != n_channels:
-            out_cards = int(cfg[1].split('_')[1])
-            cfg.insert(1, f'conv_{n_channels}_{out_cards}_1')
-
         for i in range(1, len(cfg)):
             layer_cfg = cfg[i]
             enc_layer = []
             dec_layer = []
             enc_, dec_ = _resolve_layer(layer_cfg, activation)
-            # Add symmetric layers to encoder and decoder
-            if 'conv' in cfg[i].lower():
-                kernel_size = int(cfg[i].split('_')[-1])
-                card_height, card_width = card_height - kernel_size + 1, card_width - kernel_size + 1
-            if 'conv' in cfg[i - 1].lower() and 'linear' in cfg[i].lower():
-                neurons_num = int(cfg[i].split('_')[1])
-                encoder_fan_in = card_height * card_width * int(cfg[i - 1].split('_')[2])
-                enc_layer.insert(0, [nn.Flatten(),
-                                     nn.Linear(encoder_fan_in, neurons_num),
-                                     _resolve_act(activation),
-                                     ])
-                dec_.insert(-1, _resolve_act(activation))
-                dec_.insert(-1, nn.Linear(neurons_num, encoder_fan_in))
-                dec_.insert(-1, nn.Unflatten(1, (int(cfg[i - 1].split('_')[2]), card_height, card_width)))
 
             enc_layer.append(enc_)
             dec_layer.append(dec_)
