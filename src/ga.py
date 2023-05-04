@@ -276,23 +276,24 @@ class GeneticAlgorithm:
         gen = self._generate_population(k)
 
         # Calculate the initial fitness
-        prev_fitness = self.fitness.get(tuple(gen[0]), -1e9)
+        prev_fitness = self.fitness.get(tuple(gen[0]), 1e9)
 
         # Best chromosome
         best_chromosome = None
-        best_fitness = -1e9
+        best_fitness = 1e9
 
         # Flag to stop if there is no improvements for some generations
         early_stop_flag = patience
         for i in tqdm(range(n_trial), desc='GA pbar'):
             gen = self.get_elite(gen, k)
-            gen_fitness = self.fitness.get(tuple(gen[0]), -1e9)
+            gen_fitness = self.fitness.get(tuple(gen[0]), 1e9)
 
-            if best_fitness <= gen_fitness:
+            if best_fitness >= gen_fitness:
                 best_fitness = gen_fitness
                 best_chromosome = gen[0]
+            print(gen_fitness, best_fitness)
 
-            if best_fitness != -1e9:
+            if np.abs(best_fitness) < 1e9:
                 wandb.log({"val_loss": best_fitness, "step": i})
 
             early_stop_flag = early_stop_flag - 1 if prev_fitness - gen_fitness >= 0 else patience
@@ -332,8 +333,8 @@ class GeneticAlgorithm:
         self.print_stats()
         # Get the best solution
         top_chromosome = self.get_elite(gen, 1)[0] if not save_best else best_chromosome
-        top_model, min_loss = self._fit_autoencoder(top_chromosome, 20, return_model=True)
-        return top_model, min_loss
+        top_model, min_loss, l_means, l_stds = self._fit_autoencoder(top_chromosome, 40, return_model=True)
+        return top_model, min_loss, l_means, l_stds
 
     def print_stats(self):
         print(f'Out of {self.n_runs} runs, {len(self.skips)} was skipped ({len(self.skips) / self.n_runs * 100}%)')
@@ -359,6 +360,7 @@ class GeneticAlgorithm:
 
         patience = 3
         early_stop_flag = patience
+
         for epoch in tqdm(range(epochs), leave=False, desc=' '.join(cfg)):
             model.train()
             train_losses_per_epoch = []
@@ -393,7 +395,19 @@ class GeneticAlgorithm:
         if return_model:
             model.load_state_dict(torch.load('./models/best_model.pth'))
             model.eval()
-            return model, np.min(val_losses)
+            latent_vectors = []
+            with torch.no_grad():
+                for i, X_batch in enumerate(self.train_loader):
+                    optimizer.zero_grad()
+                    batch = X_batch.to(self._device)
+                    reconstructed, latent = model(batch)
+                    lv = latent.detach().cpu().numpy()
+                    for j in range(lv.shape[0]):
+                        latent_vectors.append(lv[j])
+            latent_vectors = np.array(latent_vectors)
+            means = latent_vectors.mean(axis=0)
+            stds = latent_vectors.std(axis=0)
+            return model, np.min(val_losses), means, stds
         del model
         torch.cuda.empty_cache()
         gc.collect()
