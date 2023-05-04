@@ -248,7 +248,7 @@ class GeneticAlgorithm:
         for _ in range(k):
             individual = [choice(ACTIVATIONS)]
 
-            n_layers = randint(int(n_layers == 0), 4)
+            n_layers = randint(3, 6)
             features = [flatten_size] + sorted(choices(LINEAR_FEATURES, k=n_layers), reverse=True)
             for i in range(n_layers):
                 individual.append(f"linear_{features[i]}_{features[i + 1]}")
@@ -340,7 +340,7 @@ class GeneticAlgorithm:
         self.print_stats()
         # Get the best solution
         top_chromosome = self.get_elite(gen, 1)[0] if not save_best else best_chromosome
-        top_model, min_loss = self._fit_autoencoder(top_chromosome, 1, return_model=True)
+        top_model, min_loss = self._fit_autoencoder(top_chromosome, 20, return_model=True)
         return top_model, min_loss
 
     def print_stats(self):

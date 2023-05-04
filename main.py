@@ -22,9 +22,12 @@ def sample_from_decoder(model, image_shape):
             flatten_shape *= sh
         input_size = (n_images, flatten_shape)
     with torch.no_grad():
-        img = torch.from_numpy(np.random.random(input_size)).float().to(device)
+        img = torch.from_numpy(np.random.normal(loc=np.zeros(input_size),
+                                                scale=np.ones(input_size),
+                                                size=input_size)).float().to(device)
         latent_sample = model.encoder(img)
     latent_size = latent_sample.detach().cpu().shape
+    print(latent_size)
     latent = np.random.random(latent_size)
     latent = torch.from_numpy(latent).float().to(device)
     imgs = model.decoder(latent).cpu().detach().numpy()
@@ -40,7 +43,7 @@ def sample_from_decoder(model, image_shape):
 
 
 if __name__ == '__main__':
-    # wandb.init(project='GA_training', entity='b21ds01-nic-project')
+    wandb.init(project='GA_training', entity='b21ds01-nic-project')
     im_shape = (32, 32)
     files = parse_dataset(dataset='cats')
     train, val = train_test_split(files, train_size=0.8, random_state=42)
@@ -49,13 +52,13 @@ if __name__ == '__main__':
     val_data = CatDataset(dataset='cats', rescale_size=im_shape, do_augmentation=False, files=val)
 
     ga = GeneticAlgorithm(train_data, val_data, batch_size=BATCH_SIZE)
-    ga_k = 2
-    ga_n_trial = 5
+    ga_k = 5
+    ga_n_trial = 2
     epochs_per_sample = 1
     model, loss = ga.train_ga(k=ga_k, n_trial=ga_n_trial, save_best=False, epochs_per_sample=epochs_per_sample)
     torch.save(model, Path(f'./checkpoints/model_k{ga_k}_{ga_n_trial}.pth'))
     print('Best loss', loss)
-    #
+    model = torch.load(Path(f'./checkpoints/model_k{ga_k}_{ga_n_trial}.pth'))
     # model, loss = ga._fit_autoencoder(cfg='ReLU linear_2048_1024 linear_1024_512 linear_512_256 linear_256_128'.split(), epochs=10, return_model=True)
     # print(loss)
     sample_from_decoder(model, image_shape=(3, *im_shape))
