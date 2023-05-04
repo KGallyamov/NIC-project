@@ -338,7 +338,7 @@ class GeneticAlgorithm:
 
             early_stop_flag = early_stop_flag - 1 if prev_fitness - gen_fitness >= 0 else patience
             if early_stop_flag == 0:
-                print('Early stop')
+                print('Early stop in GA')
                 break
             prev_fitness = gen_fitness
 
@@ -367,7 +367,7 @@ class GeneticAlgorithm:
 
         # Get the best solution
         top_chromosome = self.get_elite(gen, 1)[0] if not save_best else best_chromosome
-        top_model, min_loss = self._fit_autoencoder(top_chromosome, epochs_per_sample)
+        top_model, min_loss = self._fit_autoencoder(top_chromosome, 20)
         return top_model, min_loss
 
     def _fit_autoencoder(self, cfg: List[str], epochs) -> tuple[AutoEncoder, np.ndarray]:
@@ -382,7 +382,7 @@ class GeneticAlgorithm:
         criterion = nn.MSELoss()
         model = model.to(self._device)
 
-        optimizer = torch.optim.Adam(model.parameters(), lr=3e-4)
+        optimizer = torch.optim.Adam(model.parameters())
 
         train_losses = []
         val_losses = []
@@ -411,6 +411,7 @@ class GeneticAlgorithm:
                     loss = criterion(reconstructed, batch)
                     val_losses_per_epoch.append(loss.item())
             val_losses.append(np.mean(val_losses_per_epoch))
+            # print(np.mean(val_losses_per_epoch))
             if val_losses[-1] <= min_val_loss:
                 min_val_loss = val_losses[-1]
                 torch.save(model.state_dict(), './models/best_model.pth')
@@ -419,6 +420,7 @@ class GeneticAlgorithm:
         model.eval()
         return model, min(val_losses)
 
-if __name__ == '__main__':
-    ga = GeneticAlgorithm([np.zeros((3, 32, 32))], [np.zeros((3, 32, 32))], 1)
-    print(ga.maintain_restrictions(['LReLU', 'conv_3_64_7', 'conv_64_12_5', 'conv_12_12_3', 'conv_12_12_3', 'conv_12_12_3', 'conv_12_4_3', 'linear_128_64']))
+
+# if __name__ == '__main__':
+#     ga = GeneticAlgorithm([np.zeros((3, 32, 32))], [np.zeros((3, 32, 32))], 1)
+#     print(ga.maintain_restrictions(['LReLU', 'conv_3_64_7', 'conv_64_12_5', 'conv_12_12_3', 'conv_12_12_3', 'conv_12_12_3', 'conv_12_4_3', 'linear_128_64']))
