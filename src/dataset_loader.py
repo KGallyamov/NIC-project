@@ -8,8 +8,20 @@ from torch.utils.data import Dataset
 from torchvision import transforms
 
 
+def parse_dataset(dataset: str, data_path: str = 'data'):
+    """
+    Get all files from dataset
+
+    :param dataset:    name of dataset in `data` folder
+    :param data_path:  path of `data` folder (by default we suppose that is the same level as main.py)
+    :return:           all files from the given folder
+    """
+    path = os.path.join(data_path, dataset)
+    return os.listdir(path)
+
+
 class CatDataset(Dataset):
-    def __init__(self, dataset: str, rescale_size: tuple[int, int], data_path: str = 'data', do_augmentation: bool = True):
+    def __init__(self, dataset: str, rescale_size: tuple[int, int], data_path: str = 'data', do_augmentation: bool = True, files: list[str] = None):
         """
         Initialization of DatasetLoader
 
@@ -17,6 +29,7 @@ class CatDataset(Dataset):
         :param rescale_size:     tuple with required rescale_size
         :param data_path:        path of `data` folder (by default we suppose that is the same level as main.py)
         :param do_augmentation:  boolean parameter that identify whether augmentation is required (for validation no)
+        :param files:            files to only work with (default None meaning all)
         """
         super().__init__()
 
@@ -26,21 +39,18 @@ class CatDataset(Dataset):
         self.do_augmentation = do_augmentation
 
         # read images folder
-        self.files = os.listdir(self.path)
+        self.files = os.listdir(self.path) if files is None else files
         self.len_ = len(self.files)
 
         # define augmentation
         self.transform = transforms.Compose([
             transforms.Resize(self.rescale_size),
             transforms.RandomHorizontalFlip(),
-            transforms.RandomVerticalFlip(),
-            transforms.ToTensor(),
-            transforms.Normalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225])
+            transforms.ToTensor()
         ])
         self.resize = transforms.Compose([
             transforms.Resize(self.rescale_size),
-            transforms.ToTensor(),
-            transforms.Normalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225])
+            transforms.ToTensor()
         ])
 
     def load_image(self, file) -> Image:

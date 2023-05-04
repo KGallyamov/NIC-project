@@ -12,7 +12,7 @@ for architecture tuning. As a result, we achieved a pipeline to improve
 architecture on [CIFAR-10 dataset](https://www.cs.toronto.edu/~kriz/cifar.html)
 cat generation.
 
-If you are interested in our research, you can read our findings [here](link in progress)
+If you are interested in our research, you can   read our findings [here](link in progress)
 
 # Credits
 * Polina Zelenskaya (p.zelenskaya@innopolis.university)

@@ -4,3 +4,6 @@ tqdm~=4.64.1
 wandb~=0.15.0
 torchvision~=0.14.1
 Pillow~=9.1.1
+matplotlib~=3.6.3
+sklearn~=0.0.post1
+scikit-learn~=1.2.0

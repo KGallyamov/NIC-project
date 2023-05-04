@@ -5,8 +5,9 @@ import numpy as np
 import torch
 import wandb
 from src.constants import BATCH_SIZE
-from src.dataset_loader import CatDataset
+from src.dataset_loader import CatDataset, parse_dataset
 from src.ga import GeneticAlgorithm
+from sklearn.model_selection import train_test_split
 
 
 def sample_from_decoder(model, latent_distribution=None):
@@ -27,14 +28,18 @@ def sample_from_decoder(model, latent_distribution=None):
 
 if __name__ == '__main__':
     # wandb.init(project='GA_training', entity='b21ds01-nic-project')
-    # train_data = CatDataset(dataset='cifar-10-cats', rescale_size=(32, 32), do_augmentation=True)
-    # val_data = CatDataset(dataset='cifar-10-cats', rescale_size=(32, 32), do_augmentation=False)
+
+    files = parse_dataset(dataset='cats')
+    train, val = train_test_split(files, train_size=0.8, random_state=42)
+
+    train_data = CatDataset(dataset='cats', rescale_size=(64, 64), do_augmentation=True, files=train)
+    val_data = CatDataset(dataset='cats', rescale_size=(64, 64), do_augmentation=False, files=val)
     # ga = GeneticAlgorithm(train_data, val_data, batch_size=BATCH_SIZE)
     # ga_k = 3
     # ga_n_trial = 2
     # epochs_per_sample = 10
     # model, loss = ga.train_ga(k=ga_k, n_trial=ga_n_trial, save_best=False, epochs_per_sample=epochs_per_sample)
     # torch.save(model, Path(f'./checkpoints/model_k{ga_k}_{ga_n_trial}.pth'))
-    model = torch.load('./checkpoints/model_k1_1.pth')
-    sample_from_decoder(model)
+    # model = torch.load('./checkpoints/model_k1_1.pth')
+    # sample_from_decoder(model)
     # ga._fit_autoencoder('Tanh conv_3_64_7 conv_64_27_5 conv_27_8_3 conv_8_4_1'.split(), 1)
