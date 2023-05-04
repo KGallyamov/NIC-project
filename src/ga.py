@@ -1,4 +1,5 @@
 # Default libraries
+import gc
 from typing import List, Tuple, Union
 from random import randint, choice, choices, random
 from heapq import nlargest  # used for optimization
@@ -12,34 +13,55 @@ import torch.nn as nn
 import torch.utils.data as data_utils
 
 # Our units
-from src.constants import ACTIVATIONS, LINEAR_FEATURES, CONV_FEATURES, KERNEL_SIZE, KERNEL_SIZE_WEIGHTS
+from src.constants import ACTIVATIONS, LINEAR_FEATURES, CONV_FEATURES, KERNEL_SIZE, KERNEL_SIZE_WEIGHTS, LATENT_SIZE
 from src.model import AutoEncoder
+
+from numba import cuda
+
+def free_gpu_cache():
+    torch.cuda.empty_cache()
+    cuda.select_device(0)
+    cuda.close()
+    cuda.select_device(0)
 
 
 class GeneticAlgorithm:
-
     def __init__(self, train_data, val_data, batch_size):
+        """
+        Initialization of GA
+
+        :param train_data:  data to train on
+        :param val_data:    validation data
+        :param batch_size:  size of batch
+        """
         self.train_loader = data_utils.DataLoader(train_data, batch_size=batch_size, shuffle=True)
         self.val_loader = data_utils.DataLoader(val_data, batch_size=batch_size, shuffle=False)
         self._device = torch.device('cuda') if torch.cuda.is_available() else torch.device('cpu')
         self.fitness = dict()
         self.data_size = train_data[0].shape
 
+        self.n_runs = 0
+        self.skips = []
+
     def mutate(self, x: List[str], p: float) -> List[str]:
         """
         Given config of a single AE, mutate each layer with probability p
-        sample_arch = ['ReLU', 'conv_3_32_5', 'conv_32_64_5',
-                       'conv_64_128_3', 'linear_4096_1024',
-                       'linear_1024_512', 'linear_512_128']
-        ga = GeneticAlgorithm([(0, 0)], [(0, 0)], 1)
-        print(ga.mutate(sample_arch, p=1.0))
-        (non-deterministic)
-        >>> ['Sigmoid', 'conv_3_32_5', 'conv_32_70_5', 'conv_70_128_3', 'linear_4096_1024', 'linear_1024_512', 'linear_512_128']
-        (non-deterministic)
-        >>> ['Tanh', 'conv_3_48_9', 'conv_48_128_3', 'linear_4096_1024', 'linear_1024_512', 'linear_512_128']
-        :param x: Original chromosome
-        :param p: Mutation chance
-        :return: Updated config
+
+        Examples:
+            sample_arch = ['ReLU', 'conv_3_32_5', 'conv_32_64_5',
+                           'conv_64_128_3', 'linear_4096_1024',
+                           'linear_1024_512', 'linear_512_128']
+            ga = GeneticAlgorithm([(0, 0)], [(0, 0)], 1)
+            print(ga.mutate(sample_arch, p=1.0))
+            (non-deterministic)
+            >>> ['Sigmoid', 'conv_3_32_5', 'conv_32_70_5', 'conv_70_128_3', 'linear_4096_1024', 'linear_1024_512', 'linear_512_128']
+            (non-deterministic)
+            >>> ['Tanh', 'conv_3_48_9', 'conv_48_128_3', 'linear_4096_1024', 'linear_1024_512', 'linear_512_128']
+
+
+        :param x:  original chromosome
+        :param p:  mutation chance
+        :return:   updated config
         """
         mutated_x = x.copy()
         if np.random.random() < p:  # Change the activation function with probability p
@@ -54,7 +76,7 @@ class GeneticAlgorithm:
                 mutated_x.insert(ind + 1, new_layer)
             return mutated_x
         # Delete a random layer with probability p / 3
-        elif p / 3 < action_prob < 2 * p / 3 and len(mutated_x) > 3:
+        elif p / 3 < action_prob < 2 * p / 3 and len(mutated_x) > 4:
             ind = np.random.randint(2, len(mutated_x) - 2)
             rm_layer = mutated_x[ind]
             del mutated_x[ind]
@@ -72,15 +94,16 @@ class GeneticAlgorithm:
                 mutated_x[ind - 1], mutated_x[ind] = alteration_result
         return mutated_x
 
-    def maintain_restrictions(self, x: List[str]) -> List[str]:
-        '''
+    @staticmethod
+    def maintain_restrictions(x: List[str]) -> List[str]:
+        """
         The list of restrictions:
         1. Convolutions strictly before fully connected layers
         2. Gradually decreasing number of features
 
-        :param x:
-        :return: individual with applied restrictions
-        '''
+        :param x:  config that represents autoencoder architecture
+        :return:   individual with applied restrictions
+        """
 
         # fix restriction 1 via removing any [f,c,f] and [c,f,c] sequences
         rule_1_x = [x[0]]
@@ -90,8 +113,8 @@ class GeneticAlgorithm:
             rule_1_x.append(x[i])
 
         # fix restriction 2 via removing increasing sequences
-        rule_2_x = [rule_1_x[0]]
-        min_features = int(rule_1_x[1].split('_')[1])
+        rule_2_x = [rule_1_x[0], rule_1_x[1]]
+        min_features = int(rule_1_x[1].split('_')[2])
         for i in range(2, len(rule_1_x)):
             current_features = int(rule_1_x[i].split('_')[1])
             if rule_1_x[i - 1].split('_')[0] == 'conv' and rule_1_x[i].split('_')[0] == 'linear':
@@ -103,18 +126,39 @@ class GeneticAlgorithm:
                 min_features = current_features
                 rule_2_x.append(rule_1_x[i])
 
-        return rule_2_x
+        for i in range(2, len(rule_2_x)):
+            if rule_2_x[i - 1].split('_')[0] == rule_2_x[i].split('_')[0]:
+                gen_prev = rule_2_x[i - 1].split('_')
+                gen_next = rule_2_x[i].split('_')
+                rule_2_x[i - 1] = '_'.join([gen_prev[0], gen_prev[1], gen_next[1]] + gen_prev[3:])
 
-    def _compress_layers(self, left: str, to_rm: str, right: str) -> Union[Tuple[str, str], None]:
+        rule_3_x = [rule_2_x[0]]
+        conv_limit = 4
+        for i in range(1, len(rule_2_x)):
+            if rule_2_x[i].split('_')[0] == 'linear':
+                rule_3_x.append(rule_2_x[i])
+            elif rule_2_x[i].split('_')[0] == 'conv' and conv_limit > 0:
+                rule_3_x.append(rule_2_x[i])
+                conv_limit -= 1
+
+        return rule_3_x
+
+    @staticmethod
+    def _compress_layers(left: str, to_rm: str, right: str) -> Union[Tuple[str, str], None]:
         """
-        print(GeneticAlgorithm._compress_layers(None, 'conv_3_32_3', 'conv_32_64_5', 'conv_64_128_3'))
-        >>> ('conv_3_48_7', 'conv_48_128_3')
-        print(GeneticAlgorithm._compress_layers(None, 'linear_1000_32', 'linear_32_64', 'linear_64_128'))
-        >>> ('linear_1000_48', 'linear_48_128')
-        :param left: Layer before the layer to remove
-        :param to_rm: Layer after to compress
-        :param right: Layer after the one to be removed
-        :return: False if mutation failed else configs for updated left and right
+        Transform 3 continious same-type layers to 2 continious same-type layers (with the same shape)
+
+        Examples:
+            print(GeneticAlgorithm._compress_layers('conv_3_32_3', 'conv_32_64_5', 'conv_64_128_3'))
+            >>> ('conv_3_48_7', 'conv_48_128_3')
+            print(GeneticAlgorithm._compress_layers('linear_1000_32', 'linear_32_64', 'linear_64_128'))
+            >>> ('linear_1000_48', 'linear_48_128')
+
+
+        :param left:   layer before the layer to remove
+        :param to_rm:  layer after to compress
+        :param right:  layer after the one to be removed
+        :return:       None if mutation has failed, update layers configs otherwise
         """
         left_conf, to_rm_conf, right_conf = left.split('_'), to_rm.split('_'), right.split('_')
         if not left_conf[0] == to_rm_conf[0] == right_conf[0]:
@@ -131,15 +175,21 @@ class GeneticAlgorithm:
             new_right += '_' + right_kernel_size
         return new_left, new_right
 
-    def _expand_layers(self, left: str, right: str) -> Union[Tuple[str, str, str], None]:
+    @staticmethod
+    def _expand_layers(left: str, right: str) -> Union[Tuple[str, str, str], None]:
         """
-        print(GeneticAlgorithm._expand_layers(None, 'conv_32_64_5', 'conv_64_128_3'))
-        >>> ('conv_32_64_2', 'conv_64_96_4', 'conv_96_128_3')
-        print(GeneticAlgorithm._expand_layers(None, 'linear_32_64', 'linear_64_128'))
-        >>> ('linear_32_64', 'linear_64_96', 'linear_96_128')
-        :param left: Layer after which we plan to insert a new layer
-        :param right: Layer before which we plan to insert a new layer
-        :return: None if mutation failed else config for three layers
+        Reverse of _compress_layers (check documentation)
+
+        Examples:
+            print(GeneticAlgorithm._expand_layers('conv_32_64_5', 'conv_64_128_3'))
+            >>> ('conv_32_64_2', 'conv_64_96_4', 'conv_96_128_3')
+            print(GeneticAlgorithm._expand_layers('linear_32_64', 'linear_64_128'))
+            >>> ('linear_32_64', 'linear_64_96', 'linear_96_128')
+
+
+        :param left:   layer after which we plan to insert a new layer
+        :param right:  layer before which we plan to insert a new layer
+        :return:       None if mutation has failed, updated layers configs otherwise
         """
         left_conf, right_conf = left.split('_'), right.split('_')
         if not left_conf[0] == right_conf[0]:
@@ -155,27 +205,43 @@ class GeneticAlgorithm:
             left_conf[-1] = str(left_kernel_size // 2)
         return '_'.join(map(str, left_conf)), '_'.join(map(str, middle_conf)), '_'.join(map(str, right_conf))
 
-    def _alter_layer(self, preceding: str, layer: str) -> Union[Tuple[str, str], None]:
+    @staticmethod
+    def _alter_layer(preceding: str, layer: str) -> Union[Tuple[str, str], None]:
         """
-        print(GeneticAlgorithm._alter_layer(None, 'linear_32_64', 'linear_64_128'))
-        (non-deterministic)
-        >>> ('linear_32_108', 'linear_108_128')
-        print(GeneticAlgorithm._alter_layer(None, 'conv_32_64_5', 'conv_64_128_3'))
-        (non-deterministic)
-        >>> ('conv_32_41_5', 'conv_41_128_3')
-        :param preceding:
-        :param layer:
-        :return:
+        Change one layer (e.x. number of input neurons)
+
+        Examples:
+            print(GeneticAlgorithm._alter_layer('linear_32_64', 'linear_64_128'))
+            (non-deterministic)
+            >>> ('linear_32_108', 'linear_108_128')
+            print(GeneticAlgorithm._alter_layer('conv_32_64_5', 'conv_64_128_3'))
+            (non-deterministic)
+            >>> ('conv_32_41_5', 'conv_41_128_3')
+
+
+        :param preceding:  layer before the one to be altered
+        :param layer:      layer to be altered
+        :return:           None if mutation has failed, updated layers configs otherwise
         """
         preceding_conf, layer_conf = preceding.split('_'), layer.split('_')
         if not preceding_conf[0] == layer_conf[0]:
             return None
-        new_neurons_num = np.random.randint(*sorted([int(preceding_conf[1]), int(layer_conf[2])]))
+        try:
+            new_neurons_num = np.random.randint(*sorted([int(preceding_conf[1]), int(layer_conf[2])]))
+        except ValueError:
+            return None
         preceding_conf[2] = str(new_neurons_num)
         layer_conf[1] = str(new_neurons_num)
         return '_'.join(preceding_conf), '_'.join(layer_conf)
 
     def crossover(self, x1: List[str], x2: List[str]) -> Tuple[List[str], List[str]]:
+        """
+        Do cross-over between two architectures
+
+        :param x1:  config1 that represents autoencoder architecture
+        :param x2:  config2 that represents autoencoder architecture
+        :return:    cross-overed x1 and x2 (with maintained restrictions)
+        """
         p1 = randint(1, len(x1) - 1)
         p2 = randint(1, len(x2) - 1)
 
@@ -184,31 +250,34 @@ class GeneticAlgorithm:
 
         return child1, child2
 
-    def compute_fitness(self, *args, **kwargs) -> float:
+    @staticmethod
+    def _get_nlargest(elements: List, k: int, key=lambda a: a):
         """
-        This function should be called only once for each model to optimize performance
-        :param args:
-        :param kwargs:
-        :return:
-        """
-        return 0
+        Return `k` the largest elements
 
-    def _get_nlargest(self, elements: List, k: int, key=lambda a: a):
-        return nlargest(k, elements, key=key)  # performs faster than sorting
+        :param elements:  list of values
+        :param k:         # of top values to return
+        :param key:       function to transform elements (default lambda a: a)
+        :return:          list of top-k values
+        """
+        return nlargest(k, elements, key=key)  # performs faster than sorting + slice
 
     def get_elite(self, generation: List[List[str]], k: int) -> List[List[str]]:
         """
         Return "k" most fit samples from the population
-        :param generation: List of Chromosomes
-        :param k: # of top samples
-        :return: List of Chromosomes of length "k"
+
+        :param generation:  list of Chromosomes
+        :param k:           # of top samples
+        :return:            list of top-k chromosomes
         """
-        return self._get_nlargest(generation, k, key=lambda x: self.fitness[x])
+        return self._get_nlargest(generation, k, key=lambda x: - self.fitness.get(tuple(x), -1e9))
 
     def _generate_population(self, k) -> List[List[str]]:
         """
-        :param k: Size of the population
-        :return: "k" chromosomes
+        Generates population of size `k`
+
+        :param k:  size of the population
+        :return:   'k' chromosomes
         """
         flatten_size = 1
         for shape in self.data_size:
@@ -217,18 +286,18 @@ class GeneticAlgorithm:
         population = []
         for _ in range(k):
             individual = [choice(ACTIVATIONS)]
-            if random() < 0.5:  # fully linear individual
-                n_layers = randint(2, 10)
-                features = [flatten_size] + sorted(choices(LINEAR_FEATURES, k=n_layers), reverse=True)
-                for i in range(n_layers):
-                    individual.append(f"linear_{features[i]}_{features[i + 1]}")
 
-            else:  # fully conv individual
-                n_layers = randint(2, 5)
-                features = [3] + sorted(choices(CONV_FEATURES, k=n_layers), reverse=True)
-                kernel_sizes = sorted(choices(KERNEL_SIZE, weights=KERNEL_SIZE_WEIGHTS, k=n_layers), reverse=True)
-                for i in range(n_layers):
-                    individual.append(f"conv_{features[i]}_{features[i + 1]}_{kernel_sizes[i]}")
+            n_layers = randint(0, 4)
+            features = [3] + sorted(choices(CONV_FEATURES, k=n_layers), reverse=True)
+            kernel_sizes = sorted(choices(KERNEL_SIZE, weights=KERNEL_SIZE_WEIGHTS, k=n_layers), reverse=True)
+            for i in range(n_layers):
+                individual.append(f"conv_{features[i]}_{features[i + 1]}_{kernel_sizes[i]}")
+
+            n_layers = randint(int(n_layers == 0), 4)
+            features = [flatten_size] + sorted(choices(LINEAR_FEATURES, k=n_layers), reverse=True)
+            for i in range(n_layers):
+                individual.append(f"linear_{features[i]}_{features[i + 1]}")
+            individual.append(f"linear_{features[-1]}_{LATENT_SIZE}")
             population.append(individual)
 
         return population
@@ -244,21 +313,23 @@ class GeneticAlgorithm:
                  ):
         """
         Genetic Algorithm implementation (maximization)
-        :param save_best: Whether save & return best globally or best of last iteration
-        :param k: Population size
-        :param n_trial: Number of iterations
-        :param keep_parents: Elitism
-        :param patience: Parameter for early stopping
-        :return: The most fit individual after "n_trial"s
-        :param mutation_p: Probability of mutation
-        :param epochs_per_sample: The number of epochs a sample is trained on
+
+        :param k:                  population size
+        :param n_trial:            number of iterations
+        :param keep_parents:       elitism
+        :param patience:           parameter for early stopping
+        :param mutation_p:         probability of mutation
+        :param epochs_per_sample:  the number of epochs a sample is trained on
+        :param save_best:          whether save & return best globally or best of last iteration
+        :return:                   the most fit individual after "n_trial"s
+
         Future improvement: train all models till convergence (from early stop)
         """
         # Generate initial population
         gen = self._generate_population(k)
 
         # Calculate the initial fitness
-        prev_fitness = self.fitness[gen[0]]
+        prev_fitness = self.fitness.get(tuple(gen[0]), -1e9)
 
         # Best chromosome
         best_chromosome = None
@@ -266,19 +337,20 @@ class GeneticAlgorithm:
 
         # Flag to stop if there is no improvements for some generations
         early_stop_flag = patience
-        for i in tqdm(range(n_trial)):
+        for i in tqdm(range(n_trial), desc='GA pbar'):
             gen = self.get_elite(gen, k)
-            gen_fitness = self.fitness[gen[0]]
+            gen_fitness = self.fitness.get(tuple(gen[0]), -1e9)
 
-            if best_fitness < gen_fitness:
+            if best_fitness <= gen_fitness:
                 best_fitness = gen_fitness
                 best_chromosome = gen[0]
 
-            wandb.log({"val_loss": best_fitness, "step": i})
+            if best_fitness != -1e9:
+                wandb.log({"val_loss": best_fitness, "step": i})
 
             early_stop_flag = early_stop_flag - 1 if prev_fitness - gen_fitness >= 0 else patience
             if early_stop_flag == 0:
-                print('Early stop')
+                print('Early stop in GA')
                 break
             prev_fitness = gen_fitness
 
@@ -299,29 +371,48 @@ class GeneticAlgorithm:
 
                 next_gen.append(c)
             gen = next_gen
-            # Train autoencoders encoded in current population and save their fitness
-            for chromosome in gen:
-                model, val_loss = self._fit_autoencoder(chromosome, epochs_per_sample)
-                prev_fit = self.fitness.get(chromosome, 1e9)
-                self.fitness[chromosome] = min(self.compute_fitness(model), prev_fit)
+            # Train auto-encoders encoded in current population and save their fitness
+            for chromosome in tqdm(gen, leave=False, desc='configs pbar'):
+                try:
+                    self.n_runs += 1
+                    val_loss = self._fit_autoencoder(chromosome, epochs_per_sample)
+                except RuntimeError:
+                    val_loss = 1e9
+                    self.skips.append(chromosome)
+                prev_fit = self.fitness.get(tuple(chromosome), 1e9)
+                self.fitness[tuple(chromosome)] = min(val_loss, prev_fit)
 
+        self.print_stats()
         # Get the best solution
         top_chromosome = self.get_elite(gen, 1)[0] if not save_best else best_chromosome
-        top_model, min_loss = self._fit_autoencoder(top_chromosome, epochs_per_sample)
+        top_model, min_loss = self._fit_autoencoder(top_chromosome, 1, return_model=True)
         return top_model, min_loss
 
-    def _fit_autoencoder(self, cfg: List[str], epochs):
-        model = AutoEncoder(cfg)
+    def print_stats(self):
+        print(f'Out of {self.n_runs} runs, {len(self.skips)} was skipped ({len(self.skips) / self.n_runs * 100}%)')
+        print(*self.skips, sep='\n')
+
+    def _fit_autoencoder(self, cfg: List[str], epochs, return_model=False) -> Union[tuple[AutoEncoder, float], float]:
+        """
+        Fit autoencoder with structure `cfg` and train for number of `epochs`
+
+        :param cfg:     list[str] that represents autoencoder structure
+        :param epochs:  # of epochs
+        :return:        fitted model & minimum val loss
+        """
+        model = AutoEncoder(cfg, self.data_size[1:])
         criterion = nn.MSELoss()
         model = model.to(self._device)
 
-        optimizer = torch.optim.Adam(model.parameters(), lr=3e-4)
+        optimizer = torch.optim.Adam(model.parameters())
 
         train_losses = []
         val_losses = []
         min_val_loss = np.inf
 
-        for epoch in range(epochs):
+        patience = 3
+        early_stop_flag = patience
+        for epoch in tqdm(range(epochs), leave=False, desc=' '.join(cfg)):
             model.train()
             train_losses_per_epoch = []
             for i, X_batch in enumerate(self.train_loader):
@@ -344,19 +435,24 @@ class GeneticAlgorithm:
                     loss = criterion(reconstructed, batch)
                     val_losses_per_epoch.append(loss.item())
             val_losses.append(np.mean(val_losses_per_epoch))
+            # print(np.mean(val_losses_per_epoch))
+            early_stop_flag = early_stop_flag - 1 if min_val_loss < np.mean(val_losses_per_epoch) else patience
+            if early_stop_flag == 0:
+                # print('Early stop in model train')
+                break
             if val_losses[-1] <= min_val_loss:
                 min_val_loss = val_losses[-1]
                 torch.save(model.state_dict(), './models/best_model.pth')
+        if return_model:
+            model.load_state_dict(torch.load('./models/best_model.pth'))
+            model.eval()
+            return model, np.min(val_losses)
+        del model
+        torch.cuda.empty_cache()
+        gc.collect()
 
-        model.load_state_dict(torch.load('./models/best_model.pth'))
-        model.eval()
-        return model, min(val_losses)
+        return np.min(val_losses)
 
-
-if __name__ == '__main__':
-    wandb.init(project='GA_training')
-    # sample_arch = ['ReLU', 'conv_3_32_5', 'conv_32_64_5',
-    #                'conv_64_128_3', 'linear_4096_1024',
-    #                'linear_1024_512', 'linear_512_128']
-    # ga = GeneticAlgorithm([(0, 0)], [(0, 0)], 1)
-    # print(ga.mutate(sample_arch, p=1.0))
+# if __name__ == '__main__':
+#     ga = GeneticAlgorithm([np.zeros((3, 32, 32))], [np.zeros((3, 32, 32))], 1)
+#     print(ga.maintain_restrictions(['LReLU', 'conv_3_64_7', 'conv_64_12_5', 'conv_12_12_3', 'conv_12_12_3', 'conv_12_12_3', 'conv_12_4_3', 'linear_128_64']))
