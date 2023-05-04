@@ -1,7 +1,7 @@
 # Default libraries
 import gc
 from typing import List, Tuple, Union
-from random import randint, choice, choices, random
+from random import randint, choice, choices
 from heapq import nlargest  # used for optimization
 
 # Code for GA training is adapted from the labs
@@ -15,14 +15,6 @@ import torch.utils.data as data_utils
 # Our units
 from src.constants import ACTIVATIONS, LINEAR_FEATURES, KERNEL_SIZE, KERNEL_SIZE_WEIGHTS, LATENT_SIZE
 from src.model import AutoEncoder
-
-from numba import cuda
-
-def free_gpu_cache():
-    torch.cuda.empty_cache()
-    cuda.select_device(0)
-    cuda.close()
-    cuda.select_device(0)
 
 
 class GeneticAlgorithm:
