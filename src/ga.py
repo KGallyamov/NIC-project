@@ -270,7 +270,7 @@ class GeneticAlgorithm:
         :param k:           # of top samples
         :return:            list of top-k chromosomes
         """
-        return self._get_nlargest(generation, k, key=lambda x: self.fitness.get(tuple(x), -1e9))
+        return self._get_nlargest(generation, k, key=lambda x: - self.fitness.get(tuple(x), -1e9))
 
     def _generate_population(self, k) -> List[List[str]]:
         """
@@ -385,7 +385,7 @@ class GeneticAlgorithm:
         self.print_stats()
         # Get the best solution
         top_chromosome = self.get_elite(gen, 1)[0] if not save_best else best_chromosome
-        top_model, min_loss = self._fit_autoencoder(top_chromosome, 10, return_model=True)
+        top_model, min_loss = self._fit_autoencoder(top_chromosome, 1, return_model=True)
         return top_model, min_loss
 
     def print_stats(self):
@@ -410,6 +410,8 @@ class GeneticAlgorithm:
         val_losses = []
         min_val_loss = np.inf
 
+        patience = 3
+        early_stop_flag = patience
         for epoch in tqdm(range(epochs), leave=False, desc=' '.join(cfg)):
             model.train()
             train_losses_per_epoch = []
@@ -434,6 +436,10 @@ class GeneticAlgorithm:
                     val_losses_per_epoch.append(loss.item())
             val_losses.append(np.mean(val_losses_per_epoch))
             # print(np.mean(val_losses_per_epoch))
+            early_stop_flag = early_stop_flag - 1 if min_val_loss < np.mean(val_losses_per_epoch) else patience
+            if early_stop_flag == 0:
+                # print('Early stop in model train')
+                break
             if val_losses[-1] <= min_val_loss:
                 min_val_loss = val_losses[-1]
                 torch.save(model.state_dict(), './models/best_model.pth')
@@ -444,7 +450,6 @@ class GeneticAlgorithm:
         del model
         torch.cuda.empty_cache()
         gc.collect()
-        # free_gpu_cache()
 
         return np.min(val_losses)
 
