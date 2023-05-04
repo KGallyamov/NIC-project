@@ -28,7 +28,7 @@ def sample_from_decoder(model, image_shape, means, stds):
         latent_sample = model.encoder(img)
     latent_size = latent_sample.detach().cpu().shape
     print(latent_size)
-    latent = np.random.normal(loc = means, scale=stds, size=latent_size)
+    latent = np.random.normal(loc=means, scale=stds, size=latent_size)
     latent = torch.from_numpy(latent).float().to(device)
     imgs = model.decoder(latent).cpu().detach().numpy()
     plt_shape = int(np.sqrt(n_images))

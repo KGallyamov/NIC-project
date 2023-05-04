@@ -13,7 +13,7 @@ import torch.nn as nn
 import torch.utils.data as data_utils
 
 # Our units
-from src.constants import ACTIVATIONS, LINEAR_FEATURES, KERNEL_SIZE, KERNEL_SIZE_WEIGHTS, LATENT_SIZE
+from src.constants import ACTIVATIONS, LINEAR_FEATURES, LATENT_SIZE
 from src.model import AutoEncoder
 
 
@@ -291,7 +291,6 @@ class GeneticAlgorithm:
             if best_fitness >= gen_fitness:
                 best_fitness = gen_fitness
                 best_chromosome = gen[0]
-            print(gen_fitness, best_fitness)
 
             if np.abs(best_fitness) < 1e9:
                 wandb.log({"val_loss": best_fitness, "step": i})
@@ -384,10 +383,8 @@ class GeneticAlgorithm:
                     loss = criterion(reconstructed, batch)
                     val_losses_per_epoch.append(loss.item())
             val_losses.append(np.mean(val_losses_per_epoch))
-            # print(np.mean(val_losses_per_epoch))
             early_stop_flag = early_stop_flag - 1 if min_val_loss < np.mean(val_losses_per_epoch) else patience
             if early_stop_flag == 0:
-                # print('Early stop in model train')
                 break
             if val_losses[-1] <= min_val_loss:
                 min_val_loss = val_losses[-1]
